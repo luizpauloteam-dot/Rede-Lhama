@@ -8,6 +8,7 @@ const {
 
 const config = require("./config");
 const { attachDiscordLogBridge, createLogger } = require("./utils/logger");
+const { connectMongo, disconnectMongo } = require("./utils/mongodb");
 
 const log = createLogger("core");
 
@@ -36,6 +37,10 @@ function validateRuntimeConfig() {
   if (!config.discord.token) {
     throw new Error("DISCORD_BOT_TOKEN nao configurado no arquivo .env.");
   }
+
+  if (config.tickets.enabled && !config.mongodb.uri) {
+    throw new Error("MONGODB_URI nao configurado no arquivo .env.");
+  }
 }
 
 function resolveActivityType(activityTypeName) {
@@ -62,6 +67,12 @@ function registerProcessHandlers() {
       await client.destroy();
     } catch (error) {
       log.error("Falha ao destruir client durante o shutdown.", error);
+    }
+
+    try {
+      await disconnectMongo();
+    } catch (error) {
+      log.error("Falha ao desconectar MongoDB durante o shutdown.", error);
     } finally {
       process.exit(0);
     }
@@ -134,6 +145,8 @@ async function bootstrap() {
   validateRuntimeConfig();
   registerProcessHandlers();
   registerClientHandlers();
+
+  await connectMongo();
 
   await Promise.all([
     require("./Handler/commands")(client),

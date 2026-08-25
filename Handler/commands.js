@@ -1,5 +1,10 @@
 const path = require("path");
-const { Collection, Events } = require("discord.js");
+const {
+  Collection,
+  Events,
+  REST,
+  Routes,
+} = require("discord.js");
 
 const config = require("../config");
 const { createLogger } = require("../utils/logger");
@@ -12,7 +17,8 @@ const {
 const log = createLogger("commands");
 
 function getCommandScope() {
-  return String(config.discord.commandScope || "guild").toLowerCase();
+  const scope = String(config.discord.commandScope || "guild").toLowerCase();
+  return scope === "global" ? "global" : "guild";
 }
 
 function normalizeCommandData(command) {
@@ -31,14 +37,12 @@ function resolveCommandName(command, commandData) {
   return command.name || commandData.name || null;
 }
 
-function getTargetGuilds(client) {
-  if (!config.discord.guildIds.length) {
-    return [...client.guilds.cache.values()];
+function getTargetGuildIds(client) {
+  if (config.discord.guildIds.length) {
+    return config.discord.guildIds;
   }
 
-  return config.discord.guildIds
-    .map((guildId) => client.guilds.cache.get(guildId))
-    .filter(Boolean);
+  return [...client.guilds.cache.keys()];
 }
 
 function isValidCommandModule(command, commandData, commandName) {
@@ -47,25 +51,39 @@ function isValidCommandModule(command, commandData, commandName) {
 
 async function registerSlashCommands(client, slashArray, loadedCommandNames) {
   try {
-    if (getCommandScope() === "global") {
-      await client.application.commands.set(slashArray);
+    const applicationId = config.discord.clientId || client.application?.id || client.user?.id;
+
+    if (!applicationId) {
+      log.warn("Nao foi possivel identificar o DISCORD_CLIENT_ID para sincronizar comandos.");
+      return;
+    }
+
+    const rest = new REST({ version: "10" }).setToken(config.discord.token);
+    const commandScope = getCommandScope();
+
+    if (commandScope === "global") {
+      await rest.put(Routes.applicationCommands(applicationId), {
+        body: slashArray,
+      });
       log.info(slashArray.length ? "Comandos registrados globalmente." : "Comandos globais removidos.");
     } else {
-      const targetGuilds = getTargetGuilds(client);
+      const targetGuildIds = getTargetGuildIds(client);
 
-      if (!targetGuilds.length) {
-        log.warn("Nenhum servidor encontrado para sincronizar comandos.");
+      if (!targetGuildIds.length) {
+        log.warn("Nenhum servidor encontrado para sincronizar comandos. Configure DISCORD_GUILD_IDS na hospedagem.");
         return;
       }
 
-      for (const guild of targetGuilds) {
-        await guild.commands.set(slashArray);
+      for (const guildId of targetGuildIds) {
+        await rest.put(Routes.applicationGuildCommands(applicationId, guildId), {
+          body: slashArray,
+        });
       }
 
       log.info(
         slashArray.length
-          ? `Comandos registrados em ${targetGuilds.length} servidor(es).`
-          : `Comandos removidos em ${targetGuilds.length} servidor(es).`,
+          ? `Comandos registrados em ${targetGuildIds.length} servidor(es).`
+          : `Comandos removidos em ${targetGuildIds.length} servidor(es).`,
       );
     }
 
@@ -131,7 +149,17 @@ async function commandsHandler(client) {
       }
 
       try {
-        await guild.commands.set(slashArray);
+        const applicationId = config.discord.clientId || client.application?.id || client.user?.id;
+
+        if (!applicationId) {
+          log.warn(`Nao foi possivel registrar comandos no servidor ${guild.name}: DISCORD_CLIENT_ID ausente.`);
+          return;
+        }
+
+        const rest = new REST({ version: "10" }).setToken(config.discord.token);
+        await rest.put(Routes.applicationGuildCommands(applicationId, guild.id), {
+          body: slashArray,
+        });
         log.info(`Comandos registrados no servidor ${guild.name}.`);
       } catch (error) {
         log.error(`Erro ao registrar comandos no servidor ${guild.name}.`, error);

@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 .cache/
 data/
+*minecraft-plugin
 *.log
 *.jar
 minecraft-plugin/target/

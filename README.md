@@ -23,6 +23,16 @@ O `discloud.config` esta configurado para hospedar o bot Node.js como `TYPE=bot`
 
 Na Discloud, configure as variaveis de ambiente pelo painel da aplicacao. Nao envie `.env` para o GitHub.
 
+Para os comandos slash aparecerem no Discord, configure tambem:
+
+```env
+DISCORD_CLIENT_ID=ID_DA_APLICACAO
+DISCORD_COMMAND_SCOPE=guild
+DISCORD_GUILD_IDS=ID_DO_SERVIDOR
+```
+
+Use `DISCORD_COMMAND_SCOPE=guild` para os comandos aparecerem quase imediatamente no servidor configurado. O valor `global` tambem funciona, mas pode demorar para propagar no Discord. Se o bot ja estiver no servidor e os comandos nao aparecerem, gere um novo link de convite no Developer Portal com os escopos `bot` e `applications.commands`, convide novamente e reinicie a aplicacao na Discloud.
+
 Importante: os arquivos locais do Minecraft, como `pending-codes.txt`, `linked-accounts.txt` e `server-status.json`, ficam no PC/servidor onde o Paper roda. Se o bot rodar na Discloud, ele nao consegue ler caminhos locais como `C:/Minecraft-Server/...`. Nesse caso, mantenha o bot na mesma maquina do servidor Minecraft ou use uma ponte por API/webhook.
 
 ## Painel de vinculacao
@@ -92,6 +102,31 @@ status:
   display-address: "localhost:25565"
   update-interval-ticks: 100
 ```
+
+## Sistema de tickets
+
+O bot possui um sistema de tickets com MongoDB/Mongoose, Components v2 e categorias automaticas abaixo da categoria ancora `1541597285115371570`. Ao fechar, o canal e movido para a categoria fixa de tickets finalizados `1541646616778514512`.
+
+Configure ao menos:
+
+```env
+MONGODB_URI=mongodb+srv://usuario:senha@cluster/banco
+DISCORD_TICKET_PANEL_CHANNEL_ID=ID_DO_CANAL_DO_PAINEL
+DISCORD_TICKET_SUPPORT_ROLE_IDS=ID_CARGO_STAFF
+DISCORD_TICKET_COORDINATION_ROLE_IDS=ID_CARGO_COORDENACAO
+DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS=ID_CARGO_ADMIN
+DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID=ID_CANAL_TRANSCRIPTS
+DISCORD_TICKET_LOG_CHANNEL_ID=ID_CANAL_LOGS
+DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
+```
+
+Depois de iniciar o bot, use:
+
+```txt
+/ticket painel
+```
+
+O painel tambem e atualizado automaticamente quando tickets sao abertos, fechados, reabertos ou excluidos. A categoria ancora nunca e usada como `parentId` e nunca e excluida pelo sistema; ela serve apenas para posicionar visualmente as categorias automaticas. A mensagem final com avaliacao vai por DM para quem abriu o ticket, e o canal arquivado fica com botao de reabertura em Components v2.
 
 ## Comandos por mensagem
 
