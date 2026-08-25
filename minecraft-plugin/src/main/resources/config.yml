@@ -1,0 +1,15 @@
+code-expiration-minutes: 10
+
+# Coloque aqui as permissoes reais do seu plugin de VIP/LuckPerms.
+# O bot usa a chave da esquerda para decidir qual cargo entregar pelo DISCORD_VIP_ROLE_MAP.
+# Exemplo no bot: DISCORD_VIP_ROLE_MAP=vip:123456789012345678,vipplus:234567890123456789
+vip-permissions:
+  vip: "redelhama.vip"
+  vipplus: "redelhama.vipplus"
+
+status:
+  enabled: true
+  file-name: "server-status.json"
+  server-name: "Rede Lhama"
+  display-address: "localhost:25565"
+  update-interval-ticks: 100

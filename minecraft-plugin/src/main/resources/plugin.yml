@@ -1,0 +1,16 @@
+name: RedeLhamaConnect
+version: 1.0.0
+main: br.com.redelhama.auth.RedeLhamaAuth
+api-version: '1.21'
+author: Rede Lhama
+description: Vincula contas do Minecraft com Discord e publica status local do servidor.
+
+commands:
+  discord:
+    description: Vincula sua conta do servidor com o Discord.
+    usage: /discord conectar
+
+permissions:
+  redelhama.discord.admin:
+    description: Permite recarregar a configuracao de vinculacao.
+    default: op

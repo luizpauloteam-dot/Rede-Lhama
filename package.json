@@ -1,0 +1,18 @@
+{
+  "name": "rede-lhama-bot",
+  "version": "1.0.0",
+  "description": "Base para um bot Discord.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js && node --check config.js && node --check Handler/commands.js && node --check Handler/events.js && node --check Events/linkPanel.js && node --check Events/messageCommands.js && node --check Events/statusPanel.js && node --check utils/account-link-store.js && node --check utils/discord-channel-access.js && node --check utils/link-panel.js && node --check utils/link-roles.js && node --check utils/logger.js && node --check utils/module-loader.js && node --check utils/status-panel.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.6.1"
+  }
+}
