@@ -9,6 +9,7 @@
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
+  ThumbnailBuilder,
   UserSelectMenuBuilder,
 } = require("discord.js");
 
@@ -35,7 +36,8 @@ const TICKET_CUSTOM_IDS = {
   renamePrefix: "ticket:rename",
   renameModalPrefix: "ticket:rename-modal",
   closePrefix: "ticket:close",
-  closeModalPrefix: "ticket:close-modal",
+  closeConfirmPrefix: "ticket:close-confirm",
+  closeCancelPrefix: "ticket:close-cancel",
   managePrefix: "ticket:manage",
   reopenPrefix: "ticket:reopen",
   reviewPrefix: "ticket:review",
@@ -97,6 +99,17 @@ function buildDisabledBadge(customId, label, style = ButtonStyle.Secondary) {
     .toJSON();
 }
 
+function buildThumbnail(url, description) {
+  if (!url) {
+    return null;
+  }
+
+  return new ThumbnailBuilder()
+    .setURL(url)
+    .setDescription(description)
+    .toJSON();
+}
+
 function formDataToDisplayLines(ticket, categoryConfig) {
   const formData = ticket.formData || {};
   const getValue = (key) => {
@@ -142,7 +155,7 @@ function buildSupportPanelComponents({ openTicketCount }) {
     buildText(
       [
         "# 📫 Central de Atendimento",
-        "Para que o atendimento ocorra de forma agilizada, selecione corretamente a categoria que atenda a sua solicitação.",
+        "Para agilizar o atendimento, selecione corretamente a categoria da sua solicitação.",
       ].join("\n"),
     ),
     buildSeparator(),
@@ -152,14 +165,14 @@ function buildSupportPanelComponents({ openTicketCount }) {
         [
           "• Dias úteis - `10:00` às `20:00` (UTC-3)",
           "• Fins de semana e feriados - `10:00` às `16:00` (UTC-3)",
-          "Atendimentos podem ocorrer fora deste período porém com baixa prioridade.",
+          "Atendimentos podem ocorrer fora deste período, porém com baixa prioridade.",
         ].join("\n"),
       ].join("\n"),
     ),
     buildText(
       [
         `Temos \`${openTicketLabel}\` em aberto, tempo de espera está \`${waitLevel}\`.`,
-        "Seja paciente, atendimentos ocorrem por ordem de chegada, embora estejamos empenhados em agilizar seu atendimento, temos prazo máximo **2 dias úteis**.",
+        "Tenha paciência: os atendimentos ocorrem por ordem de chegada. Nosso prazo máximo é de **2 dias úteis**.",
       ].join("\n"),
     ),
     buildSeparator(),
@@ -268,6 +281,25 @@ function buildTicketActionRow(ticket) {
   );
 }
 
+function buildCloseConfirmComponents(ticketId) {
+  return [
+    new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${TICKET_CUSTOM_IDS.closeConfirmPrefix}:${ticketId}`)
+          .setLabel("Confirmar")
+          .setEmoji("✅")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`${TICKET_CUSTOM_IDS.closeCancelPrefix}:${ticketId}`)
+          .setLabel("Cancelar")
+          .setEmoji("❌")
+          .setStyle(ButtonStyle.Danger),
+      )
+      .toJSON(),
+  ];
+}
+
 function buildTicketManageComponents(ticket) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const categoryName = categoryConfig.name || ticket.categoryType;
@@ -329,29 +361,28 @@ function buildTicketManageComponents(ticket) {
 function buildTicketClosedComponents(ticket) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const containerComponents = [
-    buildSection(
+    buildText(
       [
         `# Seu ticket na categoria ${categoryConfig.name || ticket.categoryType} foi finalizado!`,
         `Olá <@${ticket.ownerId}>, agradecemos seu contato. Se você precisar de mais alguma coisa, entre em contato novamente. Será um prazer ajudar você!`,
-      ],
-      buildDisabledBadge(`ticket:badge:${ticket.ticketId}:closed`, "Finalizado", ButtonStyle.Success),
+      ].join("\n"),
     ),
     buildSeparator(),
-    buildSection(
+    buildText(
       [
-        `**ID**\n${formatTicketNumber(ticket.ticketNumber)}`,
-        `**Aberto por**\n<@${ticket.ownerId}>`,
-        `**Fechado por**\n${ticket.closedBy ? `<@${ticket.closedBy}>` : "Nao informado"}`,
-      ],
-      buildDisabledBadge(`ticket:badge:${ticket.ticketId}:resumo`, "Resumo", ButtonStyle.Secondary),
+        "**Resumo**",
+        `> **ID:** ${formatTicketNumber(ticket.ticketNumber)}`,
+        `> **Aberto por:** <@${ticket.ownerId}>`,
+        `> **Fechado por:** ${ticket.closedBy ? `<@${ticket.closedBy}>` : "Não informado"}`,
+      ].join("\n"),
     ),
-    buildSection(
+    buildText(
       [
-        `**Motivo**\n${escapeDiscordText(ticket.closeReason) || "Resolvido"}`,
-        `**Aberto em**\n${formatDateTime(ticket.createdAt)}`,
-        `**Atendido por**\n${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Nao informado"}`,
-      ],
-      buildDisabledBadge(`ticket:badge:${ticket.ticketId}:atendimento`, "Atendimento", ButtonStyle.Secondary),
+        "**Atendimento**",
+        `> **Motivo:** ${escapeDiscordText(ticket.closeReason) || "Resolvido"}`,
+        `> **Aberto em:** ${formatDateTime(ticket.createdAt)}`,
+        `> **Atendido por:** ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Não informado"}`,
+      ].join("\n"),
     ),
   ];
   const media = buildMediaGallery(config.tickets.closedBannerUrl, "Banner de atendimento finalizado");
@@ -360,23 +391,18 @@ function buildTicketClosedComponents(ticket) {
     containerComponents.push(buildSeparator(), media);
   }
 
+  containerComponents.push(
+    buildSeparator(),
+    buildText("**Avalie este atendimento**\nSelecione uma nota para continuar."),
+    buildReviewSelectRow(ticket.ticketId),
+  );
+
   const container = new ContainerBuilder({
     accent_color: config.tickets.accentColor,
     components: containerComponents,
   });
 
-  return [
-    container.toJSON(),
-    new ActionRowBuilder()
-      .addComponents(
-        buildReviewButton(ticket.ticketId, 1, ButtonStyle.Danger),
-        buildReviewButton(ticket.ticketId, 2, ButtonStyle.Danger),
-        buildReviewButton(ticket.ticketId, 3, ButtonStyle.Primary),
-        buildReviewButton(ticket.ticketId, 4, ButtonStyle.Success),
-        buildReviewButton(ticket.ticketId, 5, ButtonStyle.Success),
-      )
-      .toJSON(),
-  ];
+  return [container.toJSON()];
 }
 
 function buildTicketArchivedComponents(ticket) {
@@ -388,7 +414,7 @@ function buildTicketArchivedComponents(ticket) {
       buildSection(
         [
           `# 🎟️ Ticket #${formatTicketNumber(ticket.ticketNumber)} finalizado`,
-          `${categoryName}\nFechado por ${ticket.closedBy ? `<@${ticket.closedBy}>` : "Nao informado"}`,
+          `${categoryName}\nFechado por ${ticket.closedBy ? `<@${ticket.closedBy}>` : "Não informado"}`,
         ],
         new ButtonBuilder()
           .setCustomId(`${TICKET_CUSTOM_IDS.reopenPrefix}:${ticket.ticketId}`)
@@ -413,18 +439,69 @@ function buildTicketArchivedComponents(ticket) {
   return [container.toJSON()];
 }
 
-function buildReviewButton(ticketId, rating, style) {
-  return new ButtonBuilder()
-    .setCustomId(`${TICKET_CUSTOM_IDS.reviewPrefix}:${ticketId}:${rating}`)
-    .setLabel(String(rating))
-    .setEmoji("⭐")
-    .setStyle(style);
+function buildReviewSelectRow(ticketId) {
+  const options = [
+    { rating: 1, description: "Muito ruim" },
+    { rating: 2, description: "Ruim" },
+    { rating: 3, description: "Regular" },
+    { rating: 4, description: "Bom" },
+    { rating: 5, description: "Excelente" },
+  ];
+
+  return new ActionRowBuilder()
+    .addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`${TICKET_CUSTOM_IDS.reviewPrefix}:${ticketId}`)
+        .setPlaceholder("Escolha sua nota")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(
+          options.map(({ rating, description }) => ({
+            label: `${rating} estrela${rating === 1 ? "" : "s"}`,
+            value: String(rating),
+            description,
+            emoji: "⭐",
+          })),
+        ),
+    )
+    .toJSON();
+}
+
+function buildTicketReviewComponents({ ticket, rating, userId, userAvatarUrl, comment }) {
+  const ratingNumber = Number.parseInt(rating, 10);
+  const safeRating = Number.isFinite(ratingNumber) ? Math.min(5, Math.max(1, ratingNumber)) : 1;
+  const reviewerThumbnail = buildThumbnail(userAvatarUrl, "Avatar de quem abriu o ticket");
+  const components = [
+    reviewerThumbnail
+      ? buildSection(["# Nova avaliação de ticket"], reviewerThumbnail)
+      : buildText("# Nova avaliação de ticket"),
+    buildSeparator(),
+    buildText(
+      [
+        `**Nota:** ${"⭐".repeat(safeRating)}`,
+        `**Usuário:** <@${userId}>`,
+        `**Atendente:** ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Não informado"}`,
+      ].join("\n"),
+    ),
+  ];
+
+  const safeComment = escapeDiscordText(comment);
+  if (safeComment) {
+    components.push(buildSeparator(), buildText(`**Comentário**\n${safeComment}`));
+  }
+
+  const container = new ContainerBuilder({
+    accent_color: config.tickets.accentColor,
+    components,
+  });
+
+  return [container.toJSON()];
 }
 
 function buildCategoryModal(categoryType) {
   const categoryConfig = getTicketCategoryConfig(categoryType);
   if (!categoryConfig) {
-    throw new Error(`Categoria de ticket invalida: ${categoryType}`);
+    throw new Error(`Categoria de ticket inválida: ${categoryType}`);
   }
 
   const modal = new ModalBuilder()
@@ -451,22 +528,6 @@ function buildLabelTextInput(field) {
   return new LabelBuilder()
     .setLabel(field.label)
     .setTextInputComponent(input);
-}
-
-function buildCloseModal(ticketId) {
-  return new ModalBuilder()
-    .setCustomId(`${TICKET_CUSTOM_IDS.closeModalPrefix}:${ticketId}`)
-    .setTitle("Fechar ticket")
-    .addComponents(
-      buildLabelTextInput({
-        id: "reason",
-        label: "Motivo do fechamento",
-        style: "paragraph",
-        minLength: 3,
-        maxLength: 700,
-        required: true,
-      }),
-    );
 }
 
 function buildRenameModal(ticketId) {
@@ -527,10 +588,11 @@ function buildGoToTicketRow(guildId, channelId) {
 module.exports = {
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
-  buildCloseModal,
+  buildCloseConfirmComponents,
   buildGoToTicketRow,
   buildTicketArchivedComponents,
   buildReviewModal,
+  buildTicketReviewComponents,
   buildSupportPanelComponents,
   buildTicketClosedComponents,
   buildTicketManageComponents,

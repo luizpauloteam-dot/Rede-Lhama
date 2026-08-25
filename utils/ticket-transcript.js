@@ -25,7 +25,7 @@ async function fetchTranscriptChannel(client) {
     (await client.channels.fetch(config.tickets.transcriptChannelId).catch(() => null));
 
   if (!channel?.isTextBased?.() || typeof channel.send !== "function") {
-    log.warn(`Canal de transcript invalido ou inacessivel: ${config.tickets.transcriptChannelId}`);
+    log.warn(`Canal de transcrição inválido ou inacessível: ${config.tickets.transcriptChannelId}`);
     return null;
   }
 
@@ -43,7 +43,7 @@ async function fetchAllMessages(channel) {
         before,
       })
       .catch((error) => {
-        log.warn(`Nao foi possivel buscar mensagens do canal ${channel.id}.`, error);
+        log.warn(`Não foi possível buscar mensagens do canal ${channel.id}.`, error);
         return null;
       });
 
@@ -136,11 +136,11 @@ function renderTranscriptHtml({ ticket, channel, messages }) {
     `<div class="item"><div class="label">Canal</div>${escapeHtml(channel.name)}</div>`,
     `<div class="item"><div class="label">Categoria</div>${escapeHtml(categoryConfig.name || ticket.categoryType)}</div>`,
     `<div class="item"><div class="label">Aberto por</div>${escapeHtml(ticket.ownerId)}</div>`,
-    `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Não informado")}</div>`,
     `<div class="item"><div class="label">Aberto em</div>${escapeHtml(formatDateTime(ticket.createdAt))}</div>`,
-    `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Nao informado")}</div>`,
-    `<div class="item"><div class="label">Fechado por</div>${escapeHtml(ticket.closedBy || "Nao informado")}</div>`,
-    `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Não informado")}</div>`,
+    `<div class="item"><div class="label">Fechado por</div>${escapeHtml(ticket.closedBy || "Não informado")}</div>`,
+    `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Não informado")}</div>`,
     "</div>",
     "</section>",
     messages.map(renderMessage).join(""),
@@ -172,12 +172,12 @@ async function generateAndSendTranscript(client, channel, ticket) {
 
   const message = await transcriptChannel
     .send({
-      content: `Transcript do ticket #${formatTicketNumber(ticket.ticketNumber)}.`,
+      content: `Transcrição do ticket #${formatTicketNumber(ticket.ticketNumber)}.`,
       files: [attachment],
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn(`Nao foi possivel enviar transcript do ticket ${ticket.ticketId}.`, error);
+      log.warn(`Não foi possível enviar transcrição do ticket ${ticket.ticketId}.`, error);
       return null;
     });
 

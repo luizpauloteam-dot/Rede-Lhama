@@ -2,9 +2,9 @@
 
 Base limpa para um bot Discord em Node.js.
 
-## Configuracao
+## Configuração
 
-1. Instale as dependencias:
+1. Instale as dependências:
 
 ```bash
 npm install
@@ -19,11 +19,11 @@ npm start
 
 ## Discloud
 
-O `discloud.config` esta configurado para hospedar o bot Node.js como `TYPE=bot`.
+O `discloud.config` está configurado para hospedar o bot Node.js como `TYPE=bot`.
 
-Na Discloud, configure as variaveis de ambiente pelo painel da aplicacao. Nao envie `.env` para o GitHub.
+Na Discloud, configure as variáveis de ambiente pelo painel da aplicação. Não envie `.env` para o GitHub.
 
-Para os comandos slash aparecerem no Discord, configure tambem:
+Para os comandos slash aparecerem no Discord, configure também:
 
 ```env
 DISCORD_CLIENT_ID=ID_DA_APLICACAO
@@ -31,22 +31,22 @@ DISCORD_COMMAND_SCOPE=guild
 DISCORD_GUILD_IDS=ID_DO_SERVIDOR
 ```
 
-Use `DISCORD_COMMAND_SCOPE=guild` para os comandos aparecerem quase imediatamente no servidor configurado. O valor `global` tambem funciona, mas pode demorar para propagar no Discord. Se o bot ja estiver no servidor e os comandos nao aparecerem, gere um novo link de convite no Developer Portal com os escopos `bot` e `applications.commands`, convide novamente e reinicie a aplicacao na Discloud.
+Use `DISCORD_COMMAND_SCOPE=guild` para os comandos aparecerem quase imediatamente no servidor configurado. O valor `global` também funciona, mas pode demorar para propagar no Discord. Se o bot já estiver no servidor e os comandos não aparecerem, gere um novo link de convite no Developer Portal com os escopos `bot` e `applications.commands`, convide novamente e reinicie a aplicação na Discloud.
 
-Importante: os arquivos locais do Minecraft, como `pending-codes.txt`, `linked-accounts.txt` e `server-status.json`, ficam no PC/servidor onde o Paper roda. Se o bot rodar na Discloud, ele nao consegue ler caminhos locais como `C:/Minecraft-Server/...`. Nesse caso, mantenha o bot na mesma maquina do servidor Minecraft ou use uma ponte por API/webhook.
+Importante: os arquivos locais do Minecraft, como `pending-codes.txt`, `linked-accounts.txt` e `server-status.json`, ficam no PC/servidor onde o Paper roda. Se o bot rodar na Discloud, ele não consegue ler caminhos locais como `C:/Minecraft-Server/...`. Nesse caso, mantenha o bot na mesma máquina do servidor Minecraft ou use uma ponte por API/webhook.
 
-## Painel de vinculacao
+## Painel de vinculação
 
 O bot publica automaticamente um painel com Components v2 no canal configurado em `DISCORD_LINK_PANEL_CHANNEL_ID`.
 
-Por padrao, o painel fica no canal `1541586289281859654`.
+Por padrão, o painel fica no canal `1541586289281859654`.
 
 Fluxo para o jogador:
 
 1. No Minecraft, use `/discord conectar`.
-2. Copie o codigo de 4 digitos.
-3. No Discord, clique no botao `Vincular conta` do painel.
-4. Digite o codigo no modal.
+2. Copie o código de 4 dígitos.
+3. No Discord, clique no botão `Vincular conta` do painel.
+4. Digite o código no modal.
 
 Ao vincular, o bot registra a conta em `linked-accounts.txt` e tenta entregar o cargo `@Membro` configurado em `DISCORD_MEMBER_ROLE_ID`. Se o plugin enviar chaves VIP, o bot usa `DISCORD_VIP_ROLE_MAP` para entregar os cargos VIP correspondentes.
 
@@ -70,11 +70,11 @@ Canal do painel:
 DISCORD_LINK_PANEL_CHANNEL_ID=1541586289281859654
 ```
 
-## Status automatico
+## Status automático
 
-O plugin do Minecraft gera o arquivo `server-status.json` dentro da pasta `plugins/RedeLhamaConnect`. O bot le esse arquivo local e atualiza automaticamente uma mensagem de status com Components v2 no canal configurado.
+O plugin do Minecraft gera o arquivo `server-status.json` dentro da pasta `plugins/RedeLhamaConnect`. O bot lê esse arquivo local e atualiza automaticamente uma mensagem de status com Components v2 no canal configurado.
 
-Por padrao, o bot atualiza o painel a cada 60 segundos. Se o arquivo ficar sem atualizacao por mais de 120 segundos, o painel passa para offline/manutencao.
+Por padrão, o bot atualiza o painel a cada 60 segundos. Se o arquivo ficar sem atualização por mais de 120 segundos, o painel passa para offline/manutenção.
 
 Variaveis:
 
@@ -103,9 +103,23 @@ status:
   update-interval-ticks: 100
 ```
 
+## Painel de sugestões
+
+Publique o painel com:
+
+```txt
+/sugestao painel
+```
+
+Opcionalmente informe `canal` para escolher onde o painel fica e `destino` para escolher onde as sugestões serão publicadas. O bot salva essa escolha no arquivo local do painel. Se `destino` não for informado, envia as sugestões no mesmo canal do painel.
+
+Jogadores também podem usar `/sugerir` para abrir o mesmo formulário sem passar pelo painel.
+
+Cada sugestão publicada cria um tópico para conversa, mostra botões de voto na mensagem principal e envia um controle `Implementar` dentro do tópico. Apenas administradores podem usar esse controle; ao implementar, o tópico é trancado e a sugestão aprovada é enviada para o canal `1541872816788349038`.
+
 ## Sistema de tickets
 
-O bot possui um sistema de tickets com MongoDB/Mongoose, Components v2 e categorias automaticas abaixo da categoria ancora `1541597285115371570`. Ao fechar, o canal e movido para a categoria fixa de tickets finalizados `1541646616778514512`.
+O bot possui um sistema de tickets com MongoDB/Mongoose, Components v2 e categorias automáticas abaixo da categoria âncora `1541597285115371570`. Ao fechar, o canal é movido para a categoria fixa de tickets finalizados `1541646616778514512`.
 
 Configure ao menos:
 
@@ -126,13 +140,13 @@ Depois de iniciar o bot, use:
 /ticket painel
 ```
 
-O painel tambem e atualizado automaticamente quando tickets sao abertos, fechados, reabertos ou excluidos. A categoria ancora nunca e usada como `parentId` e nunca e excluida pelo sistema; ela serve apenas para posicionar visualmente as categorias automaticas. A mensagem final com avaliacao vai por DM para quem abriu o ticket, e o canal arquivado fica com botao de reabertura em Components v2.
+O painel também é atualizado automaticamente quando tickets são abertos, fechados, reabertos ou excluídos. A categoria âncora nunca é usada como `parentId` e nunca é excluída pelo sistema; ela serve apenas para posicionar visualmente as categorias automáticas. A mensagem final com avaliação vai por DM para quem abriu o ticket, e o canal arquivado fica com botão de reabertura em Components v2.
 
 ## Comandos por mensagem
 
 ### `!say #canal texto`
 
-Envia uma mensagem pelo bot no canal informado. O usuario precisa ter a permissao `Gerenciar mensagens` no canal onde executou o comando e permissao para enviar mensagens no canal de destino.
+Envia uma mensagem pelo bot no canal informado. O usuário precisa ter a permissão `Gerenciar mensagens` no canal onde executou o comando e permissão para enviar mensagens no canal de destino.
 
 Exemplo:
 
@@ -140,14 +154,14 @@ Exemplo:
 !say #avisos Servidor aberto!
 ```
 
-Esse comando por mensagem depende do intent `Message Content`, entao configure:
+Esse comando por mensagem depende do intent `Message Content`, então configure:
 
 Discord Developer Portal > Bot > Privileged Gateway Intents > Message Content Intent.
 
 ## Estrutura
 
-- `index.js`: inicializacao do client, login, tratamento de interacoes e shutdown.
-- `config.js`: configuracao por variaveis de ambiente.
+- `index.js`: inicialização do client, login, tratamento de interações e shutdown.
+- `config.js`: configuração por variáveis de ambiente.
 - `Handler/commands.js`: carrega comandos slash da pasta `Commands`.
 - `Handler/events.js`: carrega eventos da pasta `Events`.
-- `utils/`: utilitarios compartilhados da base.
+- `utils/`: utilitários compartilhados da base.

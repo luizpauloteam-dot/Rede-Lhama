@@ -45,7 +45,7 @@ function registerFile(filePath, loadedEvents, client) {
     }
 
     if (!loadedAny) {
-      log.warn(`Arquivo ignorado por nao exportar eventos validos: ${fileLabel}`);
+      log.warn(`Arquivo ignorado por não exportar eventos válidos: ${fileLabel}`);
     }
     return;
   }
@@ -54,7 +54,7 @@ function registerFile(filePath, loadedEvents, client) {
     return;
   }
 
-  log.warn(`Arquivo ignorado por formato invalido: ${fileLabel}`);
+  log.warn(`Arquivo ignorado por formato inválido: ${fileLabel}`);
 }
 
 async function eventsHandler(client) {

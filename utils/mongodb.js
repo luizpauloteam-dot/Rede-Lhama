@@ -15,10 +15,10 @@ function hasMongoUri() {
 async function connectMongo() {
   if (!hasMongoUri()) {
     if (config.tickets.enabled) {
-      throw new Error("MONGODB_URI nao configurado no arquivo .env.");
+      throw new Error("MONGODB_URI não configurado no arquivo .env.");
     }
 
-    log.warn("MONGODB_URI nao configurado. Recursos dependentes de MongoDB ficam inativos.");
+    log.warn("MONGODB_URI não configurado. Recursos dependentes de MongoDB ficam inativos.");
     return null;
   }
 

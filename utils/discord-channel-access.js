@@ -42,14 +42,14 @@ async function validateTargetChannel({ guild, guildId, channelId, member, botMem
 
   if (!canSendToChannel(targetChannel, member)) {
     return {
-      error: "Voce nao pode enviar mensagens nesse canal.",
+      error: "Você não pode enviar mensagens nesse canal.",
       targetChannel,
     };
   }
 
   if (!canSendToChannel(targetChannel, botMember)) {
     return {
-      error: "Nao tenho permissao para enviar mensagens nesse canal.",
+      error: "Não tenho permissão para enviar mensagens nesse canal.",
       targetChannel,
     };
   }

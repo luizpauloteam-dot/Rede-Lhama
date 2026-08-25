@@ -35,11 +35,11 @@ const client = new Client({
 
 function validateRuntimeConfig() {
   if (!config.discord.token) {
-    throw new Error("DISCORD_BOT_TOKEN nao configurado no arquivo .env.");
+    throw new Error("DISCORD_BOT_TOKEN não configurado no arquivo .env.");
   }
 
   if (config.tickets.enabled && !config.mongodb.uri) {
-    throw new Error("MONGODB_URI nao configurado no arquivo .env.");
+    throw new Error("MONGODB_URI não configurado no arquivo .env.");
   }
 }
 
@@ -88,7 +88,7 @@ async function handleSlashCommand(interaction) {
   if (!command) {
     await interaction
       .reply({
-        content: "Comando nao encontrado.",
+        content: "Comando não encontrado.",
         ephemeral: true,
       })
       .catch(() => null);
@@ -101,7 +101,7 @@ async function handleSlashCommand(interaction) {
     log.error(`Falha ao executar comando ${interaction.commandName}.`, error);
 
     const payload = {
-      content: "Nao foi possivel executar o comando.",
+      content: "Não foi possível executar o comando.",
       ephemeral: true,
     };
 

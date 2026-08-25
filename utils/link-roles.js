@@ -75,7 +75,7 @@ function buildSuccessMessage(linkedAccount, roleResult) {
   }
 
   if (roleResult.failed.length) {
-    lines.push("A conta foi vinculada, mas nao consegui entregar todos os cargos. Avise a staff.");
+    lines.push("A conta foi vinculada, mas não consegui entregar todos os cargos. Avise a staff.");
   }
 
   return lines.join("\n");

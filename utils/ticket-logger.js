@@ -66,7 +66,7 @@ async function sendDiscordLog(client, guildId, payload) {
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn("Nao foi possivel enviar log de ticket no Discord.", error);
+      log.warn("Não foi possível enviar log de ticket no Discord.", error);
     });
 }
 

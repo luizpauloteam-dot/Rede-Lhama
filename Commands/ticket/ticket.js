@@ -65,7 +65,7 @@ module.exports = {
         .addChannelOption((option) =>
           option
             .setName("canal")
-            .setDescription("Canal onde o painel sera publicado.")
+            .setDescription("Canal onde o painel será publicado.")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(false),
         ),
@@ -73,7 +73,7 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informacoes do ticket neste canal."),
+        .setDescription("Mostra informações do ticket neste canal."),
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -95,16 +95,16 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("excluir")
-        .setDescription("Gera transcript e exclui definitivamente o canal do ticket."),
+        .setDescription("Gera a transcrição e exclui definitivamente o canal do ticket."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-adicionar")
-        .setDescription("Impede um usuario de abrir tickets.")
+        .setDescription("Impede um usuário de abrir tickets.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuario que sera bloqueado.")
+            .setDescription("Usuário que será bloqueado.")
             .setRequired(true),
         )
         .addStringOption((option) =>
@@ -117,13 +117,13 @@ module.exports = {
         .addBooleanOption((option) =>
           option
             .setName("permanente")
-            .setDescription("Define se o bloqueio sera permanente.")
+            .setDescription("Define se o bloqueio será permanente.")
             .setRequired(false),
         )
         .addIntegerOption((option) =>
           option
             .setName("dias")
-            .setDescription("Duracao em dias quando nao for permanente.")
+            .setDescription("Duração em dias quando não for permanente.")
             .setMinValue(1)
             .setMaxValue(3650)
             .setRequired(false),
@@ -132,22 +132,22 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-remover")
-        .setDescription("Remove um usuario da blacklist de tickets.")
+        .setDescription("Remove um usuário da blacklist de tickets.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuario que sera liberado.")
+            .setDescription("Usuário que será liberado.")
             .setRequired(true),
         ),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-info")
-        .setDescription("Consulta a blacklist de um usuario.")
+        .setDescription("Consulta a blacklist de um usuário.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuario consultado.")
+            .setDescription("Usuário consultado.")
             .setRequired(true),
         ),
     ),

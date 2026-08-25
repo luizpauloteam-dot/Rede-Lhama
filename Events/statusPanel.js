@@ -34,7 +34,7 @@ async function readStatusState() {
       return null;
     }
 
-    log.warn("Nao foi possivel ler o estado do painel de status.", error);
+    log.warn("Não foi possível ler o estado do painel de status.", error);
     return null;
   }
 }
@@ -46,7 +46,7 @@ async function writeStatusState(state) {
 
 async function resolveStatusChannel(client) {
   if (!config.status.channelId) {
-    log.warn("DISCORD_STATUS_CHANNEL_ID nao configurado.");
+    log.warn("DISCORD_STATUS_CHANNEL_ID não configurado.");
     return null;
   }
 
@@ -55,7 +55,7 @@ async function resolveStatusChannel(client) {
     (await client.channels.fetch(config.status.channelId).catch(() => null));
 
   if (!channel?.isTextBased?.() || typeof channel.send !== "function") {
-    log.warn(`Canal de status invalido ou inacessivel: ${config.status.channelId}`);
+    log.warn(`Canal de status inválido ou inacessível: ${config.status.channelId}`);
     return null;
   }
 
@@ -155,8 +155,8 @@ async function fetchServerStatus() {
   } catch (error) {
     const message =
       error.code === "ENOENT"
-        ? `Arquivo local de status nao encontrado: ${config.status.filePath}`
-        : `Nao foi possivel ler o status local do Minecraft: ${formatErrorMessage(error)}`;
+        ? `Arquivo local de status não encontrado: ${config.status.filePath}`
+        : `Não foi possível ler o status local do Minecraft: ${formatErrorMessage(error)}`;
 
     if (message !== lastStatusFileErrorMessage) {
       log.warn(message);
@@ -189,11 +189,11 @@ function logStatusChange(serverStatus) {
   lastStatusSignature = signature;
 
   if (!serverStatus.online) {
-    log.info("Status automatico atualizado: servidor offline ou em manutencao.");
+    log.info("Status automático atualizado: servidor offline ou em manutenção.");
     return;
   }
 
-  log.info(`Status automatico atualizado: ${serverStatus.players}/${serverStatus.maxPlayers} jogadores online.`);
+  log.info(`Status automático atualizado: ${serverStatus.players}/${serverStatus.maxPlayers} jogadores online.`);
 }
 
 async function sendStatusMessage(channel, components) {
@@ -227,7 +227,7 @@ async function upsertStatusPanel(client) {
           allowedMentions: SAFE_ALLOWED_MENTIONS,
         })
         .catch(async (error) => {
-          log.warn("Nao foi possivel atualizar o painel de status salvo. Vou enviar um novo.", error);
+          log.warn("Não foi possível atualizar o painel de status salvo. Vou enviar um novo.", error);
           const message = await sendStatusMessage(channel, components);
           await writeStatusState({ channelId: channel.id, messageId: message.id });
         });
@@ -257,7 +257,7 @@ async function startStatusPanel(client) {
   }, config.status.refreshIntervalMs);
   refreshTimer.unref?.();
 
-  log.info(`Atualizador automatico de status iniciado a cada ${Math.round(config.status.refreshIntervalMs / 1000)}s.`);
+  log.info(`Atualizador automático de status iniciado a cada ${Math.round(config.status.refreshIntervalMs / 1000)}s.`);
 }
 
 module.exports = {

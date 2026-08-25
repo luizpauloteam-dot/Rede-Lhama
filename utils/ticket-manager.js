@@ -25,7 +25,7 @@ const {
 } = require("./ticket-category-manager");
 const {
   buildCategoryModal,
-  buildCloseModal,
+  buildCloseConfirmComponents,
   buildGoToTicketRow,
   buildReviewModal,
   buildSupportPanelComponents,
@@ -33,11 +33,13 @@ const {
   buildTicketClosedComponents,
   buildTicketManageComponents,
   buildTicketPanelComponents,
+  buildTicketReviewComponents,
   buildRenameModal,
   buildUserSelectRow,
   TICKET_CUSTOM_IDS,
 } = require("./ticket-components");
 const {
+  buildTicketChannelName,
   formatTicketNumber,
   getTicketCategoryConfig,
   normalizeTicketChannelName,
@@ -70,7 +72,7 @@ async function readPanelState() {
       return null;
     }
 
-    log.warn("Nao foi possivel ler o estado do painel de tickets.", error);
+    log.warn("Não foi possível ler o estado do painel de tickets.", error);
     return null;
   }
 }
@@ -116,6 +118,11 @@ async function replyComponentsV2Ephemeral(interaction, components) {
 
 function isDuplicateKeyError(error) {
   return error?.code === 11000;
+}
+
+function parseReviewRating(rating) {
+  const value = Number.parseInt(rating, 10);
+  return Number.isInteger(value) && value >= 1 && value <= 5 ? value : null;
 }
 
 async function getOpenTicketCount(guildId) {
@@ -198,7 +205,7 @@ function extractFormData(interaction, categoryConfig) {
   for (const field of categoryConfig.modalFields || []) {
     const value = String(interaction.fields.getTextInputValue(field.id) || "").trim();
     if (field.required && !value) {
-      throw new Error(`O campo "${field.label}" e obrigatorio.`);
+      throw new Error(`O campo "${field.label}" é obrigatório.`);
     }
 
     values[field.id] = value;
@@ -246,7 +253,7 @@ async function fetchTicketChannel(ticket, guild) {
 async function moveTicketToClosedCategory(channel) {
   const closedCategory = await fetchGuildCategory(channel.guild, config.tickets.closedCategoryId);
   if (!closedCategory) {
-    log.warn(`Categoria de tickets fechados nao encontrada: ${config.tickets.closedCategoryId}`);
+    log.warn(`Categoria de tickets fechados não encontrada: ${config.tickets.closedCategoryId}`);
     return null;
   }
 
@@ -299,7 +306,7 @@ async function sendClosedTicketDm(client, ticket) {
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn(`Nao foi possivel enviar DM de finalizacao do ticket ${ticket.ticketId}.`, error);
+      log.warn(`Não foi possível enviar DM de finalização do ticket ${ticket.ticketId}.`, error);
       return null;
     });
 }
@@ -318,7 +325,7 @@ async function fetchPanelChannel(client, preferredChannel = null) {
     (await client.channels.fetch(config.tickets.panelChannelId).catch(() => null));
 
   if (!channel?.isTextBased?.() || typeof channel.send !== "function") {
-    log.warn(`Canal de painel de tickets invalido ou inacessivel: ${config.tickets.panelChannelId}`);
+    log.warn(`Canal de painel de tickets inválido ou inacessível: ${config.tickets.panelChannelId}`);
     return null;
   }
 
@@ -362,7 +369,7 @@ async function upsertSupportPanel(client, preferredChannel = null) {
         allowedMentions: SAFE_ALLOWED_MENTIONS,
       })
       .catch(async (error) => {
-        log.warn("Nao foi possivel atualizar o painel de tickets salvo. Vou enviar um novo.", error);
+        log.warn("Não foi possível atualizar o painel de tickets salvo. Vou enviar um novo.", error);
         const message = await channel.send({
           flags: MessageFlags.IsComponentsV2,
           components,
@@ -386,7 +393,7 @@ async function upsertSupportPanel(client, preferredChannel = null) {
 
 async function refreshSupportPanel(client) {
   await upsertSupportPanel(client).catch((error) => {
-    log.warn("Nao foi possivel atualizar painel principal de tickets.", error);
+    log.warn("Não foi possível atualizar painel principal de tickets.", error);
   });
 }
 
@@ -404,7 +411,7 @@ async function resetSupportPanelSelect(interaction) {
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn("Nao foi possivel resetar o select do painel de tickets.", error);
+      log.warn("Não foi possível resetar o select do painel de tickets.", error);
     });
 }
 
@@ -451,7 +458,7 @@ async function handlePanelSelect(interaction) {
 
   const categoryType = interaction.values?.[0];
   if (!getTicketCategoryConfig(categoryType)) {
-    await replyEphemeral(interaction, "Categoria de atendimento invalida.");
+    await replyEphemeral(interaction, "Categoria de atendimento inválida.");
     await resetSupportPanelSelect(interaction);
     return true;
   }
@@ -523,14 +530,14 @@ async function updateTicketPanelMessage(client, ticket) {
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn(`Nao foi possivel atualizar painel do ticket ${ticket.ticketId}.`, error);
+      log.warn(`Não foi possível atualizar painel do ticket ${ticket.ticketId}.`, error);
     });
 }
 
 async function createTicketFromModal(interaction, categoryType) {
   const categoryConfig = getTicketCategoryConfig(categoryType);
   if (!categoryConfig) {
-    await replyEphemeral(interaction, "Categoria de atendimento invalida.");
+    await replyEphemeral(interaction, "Categoria de atendimento inválida.");
     return true;
   }
 
@@ -570,7 +577,7 @@ async function createTicketFromModal(interaction, categoryType) {
     }
 
     ticketChannel = await interaction.guild.channels.create({
-      name: `ticket-${formatTicketNumber(ticket.ticketNumber)}`,
+      name: buildTicketChannelName(categoryType, interaction.user),
       type: ChannelType.GuildText,
       parent: categoryResult.category.id,
       topic: `Ticket ${ticket.ticketId} | Dono ${interaction.user.id} | Categoria ${categoryType}`,
@@ -614,7 +621,7 @@ async function createTicketFromModal(interaction, categoryType) {
     }
 
     if (ticketChannel) {
-      await ticketChannel.delete("Rollback de ticket apos falha na criacao.").catch(() => null);
+      await ticketChannel.delete("Rollback de ticket após falha na criação.").catch(() => null);
     }
 
     if (ticket && !ticket.channelId) {
@@ -945,7 +952,7 @@ async function handleRenameModal(interaction, ticketId) {
   const normalizedName = normalizeTicketChannelName(requestedName);
 
   if (!/^[a-z0-9-]{3,90}$/.test(normalizedName)) {
-    await replyEphemeral(interaction, "Informe um nome valido usando letras, numeros e hifens.");
+    await replyEphemeral(interaction, "Informe um nome válido usando letras, números e hifens.");
     return true;
   }
 
@@ -970,6 +977,18 @@ async function handleRenameModal(interaction, ticketId) {
     },
   });
   await replyEphemeral(interaction, `Ticket renomeado para #${normalizedName}.`);
+  return true;
+}
+
+async function showCloseConfirmation(interaction, ticketId) {
+  const ticket = await requireTicketForInteraction(interaction, ticketId);
+  if (!ticket || !(await requireStaffOrOwner(interaction, ticket))) {
+    return true;
+  }
+
+  await replyEphemeral(interaction, "# Deseja realmente fechar este suporte? Esta ação não pode ser desfeita.", {
+    components: buildCloseConfirmComponents(ticketId),
+  });
   return true;
 }
 
@@ -1066,9 +1085,27 @@ async function closeTicket(interaction, ticketId, reason) {
   return true;
 }
 
-async function handleCloseModal(interaction, ticketId) {
-  const reason = interaction.fields.getTextInputValue("reason");
-  return closeTicket(interaction, ticketId, reason);
+async function confirmCloseTicket(interaction, ticketId) {
+  await interaction
+    .update({
+      content: "Fechando ticket...",
+      components: [],
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
+    })
+    .catch(() => null);
+
+  return closeTicket(interaction, ticketId, "Resolvido");
+}
+
+async function cancelCloseTicket(interaction) {
+  await interaction
+    .update({
+      content: "Fechamento cancelado.",
+      components: [],
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
+    })
+    .catch(() => null);
+  return true;
 }
 
 async function reopenTicket(client, interaction, ticket) {
@@ -1185,7 +1222,13 @@ async function reopenTicket(client, interaction, ticket) {
   await refreshSupportPanel(client);
 }
 
-async function handleReviewButton(interaction, ticketId, rating) {
+async function handleReviewRating(interaction, ticketId, rating) {
+  const reviewRating = parseReviewRating(rating);
+  if (!reviewRating) {
+    await replyEphemeral(interaction, "Selecione uma nota válida.");
+    return true;
+  }
+
   const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
   if (!ticket) {
     return true;
@@ -1201,11 +1244,21 @@ async function handleReviewButton(interaction, ticketId, rating) {
     return true;
   }
 
-  await interaction.showModal(buildReviewModal(ticketId, rating));
+  await interaction.showModal(buildReviewModal(ticketId, reviewRating));
   return true;
 }
 
+async function handleReviewSelect(interaction, ticketId) {
+  return handleReviewRating(interaction, ticketId, interaction.values?.[0]);
+}
+
 async function handleReviewModal(interaction, ticketId, rating) {
+  const reviewRating = parseReviewRating(rating);
+  if (!reviewRating) {
+    await replyEphemeral(interaction, "Selecione uma nota válida.");
+    return true;
+  }
+
   const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
   if (!ticket) {
     return true;
@@ -1224,7 +1277,7 @@ async function handleReviewModal(interaction, ticketId, rating) {
       guildId: ticket.guildId,
       userId: interaction.user.id,
       staffId: ticket.assignedStaffId || "",
-      rating: Number(rating),
+      rating: reviewRating,
       comment,
     });
   } catch (error) {
@@ -1242,7 +1295,7 @@ async function handleReviewModal(interaction, ticketId, rating) {
     executorId: interaction.user.id,
     targetId: ticket.assignedStaffId || "",
     metadata: {
-      rating,
+      rating: reviewRating,
       comment,
     },
   });
@@ -1255,16 +1308,14 @@ async function handleReviewModal(interaction, ticketId, rating) {
     if (reviewChannel?.isTextBased?.()) {
       await reviewChannel
         .send({
-          content: [
-            `**Nova avaliação de ticket**`,
-            `Ticket #${formatTicketNumber(ticket.ticketNumber)}`,
-            `Nota: ${"⭐".repeat(Number(rating))}`,
-            `Usuário: <@${interaction.user.id}>`,
-            ticket.assignedStaffId ? `Atendente: <@${ticket.assignedStaffId}>` : "",
-            comment ? `Comentário: ${comment}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
+          flags: MessageFlags.IsComponentsV2,
+          components: buildTicketReviewComponents({
+            ticket,
+            rating: reviewRating,
+            userId: interaction.user.id,
+            userAvatarUrl: interaction.user.displayAvatarURL({ size: 128 }),
+            comment,
+          }),
           allowedMentions: SAFE_ALLOWED_MENTIONS,
         })
         .catch(() => null);
@@ -1301,18 +1352,33 @@ async function handleTicketButton(interaction) {
     return true;
   }
   if (action === "close") {
-    const ticket = await requireTicketForInteraction(interaction, ticketId);
-    if (!ticket || !(await requireStaffOrOwner(interaction, ticket))) return true;
-    await interaction.showModal(buildCloseModal(ticketId));
-    return true;
+    return showCloseConfirmation(interaction, ticketId);
   }
+  if (action === "close-confirm") return confirmCloseTicket(interaction, ticketId);
+  if (action === "close-cancel") return cancelCloseTicket(interaction);
   if (action === "reopen") {
     const ticket = await requireTicketForInteraction(interaction, ticketId);
     if (!ticket) return true;
     await reopenTicket(interaction.client, interaction, ticket);
     return true;
   }
-  if (action === "review") return handleReviewButton(interaction, ticketId, rating);
+  if (action === "review") return handleReviewRating(interaction, ticketId, rating);
+
+  return false;
+}
+
+async function handleTicketStringSelect(interaction) {
+  if (!interaction.customId?.startsWith("ticket:")) {
+    return false;
+  }
+
+  if (interaction.customId === TICKET_CUSTOM_IDS.panelSelect) {
+    return handlePanelSelect(interaction);
+  }
+
+  const [, action, ticketId] = interaction.customId.split(":");
+
+  if (action === "review") return handleReviewSelect(interaction, ticketId);
 
   return false;
 }
@@ -1343,7 +1409,6 @@ async function handleTicketModalSubmit(interaction) {
   const [, action, ticketId, rating] = interaction.customId.split(":");
 
   if (action === "rename-modal") return handleRenameModal(interaction, ticketId);
-  if (action === "close-modal") return handleCloseModal(interaction, ticketId);
   if (action === "review-modal") return handleReviewModal(interaction, ticketId, rating);
 
   return false;
@@ -1355,12 +1420,12 @@ async function handleTicketInteraction(interaction) {
   }
 
   try {
-    if (interaction.isStringSelectMenu()) return handlePanelSelect(interaction);
+    if (interaction.isStringSelectMenu()) return handleTicketStringSelect(interaction);
     if (interaction.isButton()) return handleTicketButton(interaction);
     if (interaction.isUserSelectMenu()) return handleTicketUserSelect(interaction);
     if (interaction.isModalSubmit()) return handleTicketModalSubmit(interaction);
   } catch (error) {
-    log.error("Falha ao processar interacao de ticket.", error);
+    log.error("Falha ao processar interação de ticket.", error);
     await replyEphemeral(interaction, "Não foi possível processar essa ação agora.");
     return true;
   }
@@ -1394,7 +1459,7 @@ async function initializeTickets(client) {
       ticket.status = "closed";
       ticket.closedAt = new Date();
       ticket.closedBy = client.user.id;
-      ticket.closeReason = "Canal do ticket nao encontrado ao reiniciar o bot.";
+      ticket.closeReason = "Canal do ticket não encontrado ao reiniciar o bot.";
       await ticket.save();
       await logTicketAction(client, {
         ticket,
@@ -1458,7 +1523,7 @@ async function deleteTicketFromCommand(client, interaction) {
     ticket.status = "closed";
     ticket.closedAt = new Date();
     ticket.closedBy = interaction.user.id;
-    ticket.closeReason = "Ticket excluido definitivamente.";
+    ticket.closeReason = "Ticket excluído definitivamente.";
     await ticket.save();
     await logTicketAction(client, {
       ticket,
@@ -1478,7 +1543,7 @@ async function deleteTicketFromCommand(client, interaction) {
     metadata: transcript,
   });
 
-  await channel.delete(`Ticket excluido por ${interaction.user.tag || interaction.user.id}.`);
+  await channel.delete(`Ticket excluído por ${interaction.user.tag || interaction.user.id}.`);
   await replyEphemeral(interaction, "Ticket excluído.");
 }
 
@@ -1497,7 +1562,7 @@ async function showTicketInfo(interaction) {
       `Categoria: ${categoryConfig.name || ticket.categoryType}`,
       `Dono: <@${ticket.ownerId}>`,
       `Status: ${ticket.status}`,
-      `Responsável: ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Nao definido"}`,
+      `Responsável: ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Não definido"}`,
     ].join("\n"),
   );
 }
@@ -1579,9 +1644,9 @@ async function showBlacklistEntry(interaction, user) {
     interaction,
     [
       `Usuário: <@${user.id}>`,
-      `Motivo: ${entry.reason || "Nao informado"}`,
-      `Aplicado por: ${entry.staffId ? `<@${entry.staffId}>` : "Nao informado"}`,
-      `Expira: ${entry.permanent ? "Permanente" : entry.expiresAt?.toISOString() || "Nao informado"}`,
+      `Motivo: ${entry.reason || "Não informado"}`,
+      `Aplicado por: ${entry.staffId ? `<@${entry.staffId}>` : "Não informado"}`,
+      `Expira: ${entry.permanent ? "Permanente" : entry.expiresAt?.toISOString() || "Não informado"}`,
     ].join("\n"),
   );
 }
@@ -1604,7 +1669,7 @@ async function handleTicketChannelDelete(channel, client) {
     ticket.status = "closed";
     ticket.closedAt = new Date();
     ticket.closedBy = "";
-    ticket.closeReason = "Canal do ticket excluido.";
+    ticket.closeReason = "Canal do ticket excluído.";
     await ticket.save();
   }
 

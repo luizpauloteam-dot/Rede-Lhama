@@ -90,7 +90,7 @@ async function handleSayCommand(message, client, payload) {
   }
 
   if (parsedPayload.rest.length > MAX_MESSAGE_LENGTH) {
-    await reply(message, `A mensagem precisa ter no maximo ${MAX_MESSAGE_LENGTH} caracteres.`);
+    await reply(message, `A mensagem precisa ter no máximo ${MAX_MESSAGE_LENGTH} caracteres.`);
     return;
   }
 
@@ -118,7 +118,7 @@ async function execute(message, client) {
   }
 
   if (!canUseStaffCommand(message)) {
-    await reply(message, "Voce precisa da permissao `Gerenciar mensagens` para usar este comando.");
+    await reply(message, "Você precisa da permissão `Gerenciar mensagens` para usar este comando.");
     return;
   }
 
@@ -126,7 +126,7 @@ async function execute(message, client) {
     await handleSayCommand(message, client, command.payload);
   } catch (error) {
     log.error(`Falha ao executar comando ${command.name}.`, error);
-    await reply(message, "Nao foi possivel executar este comando.");
+    await reply(message, "Não foi possível executar este comando.");
   }
 }
 

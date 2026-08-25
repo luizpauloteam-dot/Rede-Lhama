@@ -71,7 +71,7 @@ function buildCategoryPermissionOverwrites(guild, categoryType) {
 
 async function fetchGuildChannels(guild) {
   await guild.channels.fetch().catch((error) => {
-    log.warn(`Nao foi possivel atualizar cache de canais do servidor ${guild.id}.`, error);
+    log.warn(`Não foi possível atualizar cache de canais do servidor ${guild.id}.`, error);
   });
 }
 
@@ -105,7 +105,7 @@ async function cleanupInvalidCategoryRecords(guild) {
 
     if (record.discordCategoryId === config.tickets.categoryAnchorId) {
       await TicketCategory.deleteOne({ _id: record._id });
-      log.warn(`Registro invalido removido por apontar para a categoria ancora protegida (${record.discordCategoryId}).`);
+      log.warn(`Registro inválido removido por apontar para a categoria âncora protegida (${record.discordCategoryId}).`);
       continue;
     }
 
@@ -118,7 +118,7 @@ async function cleanupInvalidCategoryRecords(guild) {
     const category = await resolveGuildCategory(guild, record.discordCategoryId);
     if (!category) {
       await TicketCategory.deleteOne({ _id: record._id });
-      log.warn(`Registro de categoria removido porque o canal nao existe mais: ${record.discordCategoryId}.`);
+      log.warn(`Registro de categoria removido porque o canal não existe mais: ${record.discordCategoryId}.`);
     }
   }
 }
@@ -132,7 +132,7 @@ async function reorderManagedCategories(guild) {
 
   const anchor = await resolveGuildCategory(guild, config.tickets.categoryAnchorId);
   if (!anchor) {
-    log.warn(`Categoria ancora de tickets nao encontrada: ${config.tickets.categoryAnchorId}`);
+    log.warn(`Categoria âncora de tickets não encontrada: ${config.tickets.categoryAnchorId}`);
     return;
   }
 
@@ -177,7 +177,7 @@ async function reorderManagedCategories(guild) {
       })),
     )
     .catch((error) => {
-      log.warn("Nao foi possivel reposicionar categorias de tickets.", error);
+      log.warn("Não foi possível reposicionar categorias de tickets.", error);
     });
 }
 
@@ -207,12 +207,12 @@ async function getAvailableManagedCategory(guild, categoryType) {
 
 async function createManagedCategory(guild, categoryType) {
   if (!config.tickets.autoCreateCategories) {
-    throw new Error("Criacao automatica de categorias de tickets esta desativada.");
+    throw new Error("Criação automática de categorias de tickets está desativada.");
   }
 
   const categoryConfig = getTicketCategoryConfig(categoryType);
   if (!categoryConfig) {
-    throw new Error(`Categoria de ticket invalida: ${categoryType}`);
+    throw new Error(`Categoria de ticket inválida: ${categoryType}`);
   }
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -254,7 +254,7 @@ async function createManagedCategory(guild, categoryType) {
         name: buildCategoryName(categoryConfig, instance),
         type: ChannelType.GuildCategory,
         permissionOverwrites: buildCategoryPermissionOverwrites(guild, categoryType),
-        reason: "Categoria automatica do sistema de tickets.",
+        reason: "Categoria automática do sistema de tickets.",
       });
 
       record.discordCategoryId = category.id;
@@ -269,13 +269,13 @@ async function createManagedCategory(guild, categoryType) {
     } catch (error) {
       await TicketCategory.deleteOne({ _id: record._id }).catch(() => null);
       if (category?.deletable) {
-        await category.delete("Rollback de categoria de ticket apos falha.").catch(() => null);
+        await category.delete("Rollback de categoria de ticket após falha.").catch(() => null);
       }
       throw error;
     }
   }
 
-  throw new Error(`Nao foi possivel reservar uma categoria automatica para ${categoryType}.`);
+  throw new Error(`Não foi possível reservar uma categoria automática para ${categoryType}.`);
 }
 
 async function ensureTicketCategory(guild, categoryType) {
@@ -327,8 +327,8 @@ async function cleanupEmptyManagedCategory(guild, categoryId) {
     return false;
   }
 
-  await category.delete("Categoria automatica de tickets vazia.").catch((error) => {
-    log.warn(`Nao foi possivel excluir categoria automatica vazia ${categoryId}.`, error);
+  await category.delete("Categoria automática de tickets vazia.").catch((error) => {
+    log.warn(`Não foi possível excluir categoria automática vazia ${categoryId}.`, error);
   });
   await TicketCategory.deleteOne({ _id: record._id });
   return true;

@@ -74,7 +74,16 @@ function normalizeTicketChannelName(value) {
     .slice(0, 90);
 }
 
+function buildTicketChannelName(categoryType, user) {
+  const categoryConfig = getTicketCategoryConfig(categoryType) || {};
+  const categoryName = normalizeTicketChannelName(categoryConfig.channelPrefix || categoryConfig.name || categoryType);
+  const userName = normalizeTicketChannelName(user?.username || user?.globalName || user?.id || "usuario");
+
+  return normalizeTicketChannelName(`${categoryName || "ticket"}-${userName || "usuario"}`);
+}
+
 module.exports = {
+  buildTicketChannelName,
   escapeDiscordText,
   escapeHtml,
   formatDateTime,

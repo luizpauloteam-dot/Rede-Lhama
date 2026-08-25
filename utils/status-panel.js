@@ -28,7 +28,7 @@ function getStatusImage(serverStatus) {
 function getStatusMediaDescription(serverStatus) {
   return serverStatus?.online
     ? "Servidor online"
-    : "Servidor offline ou em manutencao";
+    : "Servidor offline ou em manutenção";
 }
 
 function getPlayerLabel(serverStatus) {
@@ -42,8 +42,8 @@ function getPlayerLabel(serverStatus) {
 function buildDetailLine(serverStatus) {
   if (!serverStatus?.online) {
     return serverStatus?.stale
-      ? "Sem atualizacao recente do servidor."
-      : "Servidor offline ou em manutencao.";
+      ? "Sem atualização recente do servidor."
+      : "Servidor offline ou em manutenção.";
   }
 
   return "";
@@ -67,7 +67,7 @@ function buildStatusComponents(serverStatus) {
   const imageUrl = getStatusImage(serverStatus);
 
   if (!imageUrl) {
-    throw new Error("Imagem do status nao configurada.");
+    throw new Error("Imagem do status não configurada.");
   }
 
   const container = new ContainerBuilder({

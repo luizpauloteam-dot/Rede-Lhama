@@ -54,7 +54,7 @@ async function registerSlashCommands(client, slashArray, loadedCommandNames) {
     const applicationId = config.discord.clientId || client.application?.id || client.user?.id;
 
     if (!applicationId) {
-      log.warn("Nao foi possivel identificar o DISCORD_CLIENT_ID para sincronizar comandos.");
+      log.warn("Não foi possível identificar o DISCORD_CLIENT_ID para sincronizar comandos.");
       return;
     }
 
@@ -115,7 +115,7 @@ async function commandsHandler(client) {
       const fileLabel = toProjectRelativePath(filePath);
 
       if (!isValidCommandModule(command, commandData, commandName)) {
-        log.warn(`Arquivo ignorado por comando invalido: ${fileLabel}`);
+        log.warn(`Arquivo ignorado por comando inválido: ${fileLabel}`);
         continue;
       }
 
@@ -152,7 +152,7 @@ async function commandsHandler(client) {
         const applicationId = config.discord.clientId || client.application?.id || client.user?.id;
 
         if (!applicationId) {
-          log.warn(`Nao foi possivel registrar comandos no servidor ${guild.name}: DISCORD_CLIENT_ID ausente.`);
+          log.warn(`Não foi possível registrar comandos no servidor ${guild.name}: DISCORD_CLIENT_ID ausente.`);
           return;
         }
 

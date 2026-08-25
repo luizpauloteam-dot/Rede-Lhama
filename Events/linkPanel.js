@@ -41,7 +41,7 @@ async function readPanelState() {
       return null;
     }
 
-    log.warn("Nao foi possivel ler o estado do painel.", error);
+    log.warn("Não foi possível ler o estado do painel.", error);
     return null;
   }
 }
@@ -53,7 +53,7 @@ async function writePanelState(state) {
 
 async function resolvePanelChannel(client) {
   if (!config.link.panelChannelId) {
-    log.warn("DISCORD_LINK_PANEL_CHANNEL_ID nao configurado.");
+    log.warn("DISCORD_LINK_PANEL_CHANNEL_ID não configurado.");
     return null;
   }
 
@@ -62,7 +62,7 @@ async function resolvePanelChannel(client) {
     (await client.channels.fetch(config.link.panelChannelId).catch(() => null));
 
   if (!channel?.isTextBased?.() || typeof channel.send !== "function") {
-    log.warn(`Canal do painel invalido ou inacessivel: ${config.link.panelChannelId}`);
+    log.warn(`Canal do painel inválido ou inacessível: ${config.link.panelChannelId}`);
     return null;
   }
 
@@ -99,10 +99,10 @@ async function upsertPanel(client) {
         allowedMentions: SAFE_ALLOWED_MENTIONS,
       })
       .then(() => {
-        log.info(`Painel de vinculacao atualizado em ${channel.id}.`);
+        log.info(`Painel de vinculação atualizado em ${channel.id}.`);
       })
       .catch(async (error) => {
-        log.warn("Nao foi possivel atualizar o painel salvo. Vou enviar um novo.", error);
+        log.warn("Não foi possível atualizar o painel salvo. Vou enviar um novo.", error);
         const message = await sendPanel(channel, components);
         await writePanelState({ channelId: channel.id, messageId: message.id });
       });
@@ -111,7 +111,7 @@ async function upsertPanel(client) {
 
   const message = await sendPanel(channel, components);
   await writePanelState({ channelId: channel.id, messageId: message.id });
-  log.info(`Painel de vinculacao enviado em ${channel.id}.`);
+  log.info(`Painel de vinculação enviado em ${channel.id}.`);
 }
 
 async function sendPanel(channel, components) {
@@ -190,8 +190,8 @@ async function handleInteraction(interaction) {
       return;
     }
 
-    log.error("Falha ao processar painel de vinculacao.", error);
-    await replyEphemeral(interaction, "Nao foi possivel vincular sua conta agora.");
+    log.error("Falha ao processar painel de vinculação.", error);
+    await replyEphemeral(interaction, "Não foi possível vincular sua conta agora.");
   }
 }
 

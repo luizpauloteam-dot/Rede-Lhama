@@ -25,7 +25,7 @@ function normalizeCode(value) {
   const code = String(value || "").trim();
 
   if (!CODE_PATTERN.test(code)) {
-    throw new LinkValidationError("Informe o codigo de 4 digitos gerado no Minecraft.");
+    throw new LinkValidationError("Informe o código de 4 dígitos gerado no Minecraft.");
   }
 
   return code;
@@ -170,17 +170,17 @@ async function consumeLinkCode(input) {
 
     if (!pendingEntry) {
       await writeFileAtomic(config.link.pendingCodesFilePath, serializePendingCodes(pendingCodes));
-      throw new LinkValidationError("Codigo invalido ou expirado. Gere outro com `/discord conectar` no Minecraft.");
+      throw new LinkValidationError("Código inválido ou expirado. Gere outro com `/discord conectar` no Minecraft.");
     }
 
     const linkedByUuid = linkedAccounts.find((entry) => entry.uuid === pendingEntry.uuid);
     if (linkedByUuid && linkedByUuid.discordId !== discordId) {
-      throw new LinkValidationError("Essa conta do Minecraft ja esta vinculada a outro Discord.");
+      throw new LinkValidationError("Essa conta do Minecraft já está vinculada a outro Discord.");
     }
 
     const linkedByDiscord = linkedAccounts.find((entry) => entry.discordId === discordId);
     if (linkedByDiscord && linkedByDiscord.uuid !== pendingEntry.uuid) {
-      throw new LinkValidationError("Seu Discord ja esta vinculado a outra conta do Minecraft.");
+      throw new LinkValidationError("Seu Discord já está vinculado a outra conta do Minecraft.");
     }
 
     const linkedAccount = {

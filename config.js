@@ -96,55 +96,23 @@ const defaultStatusImages = {
   manutencao: "https://i.imgur.com/IsFEUw1.png",
 };
 const ticketDataDir = resolveLocalPath(process.env.TICKET_DATA_DIR, path.join(process.cwd(), "data", "tickets"));
+const suggestionDataDir = path.join(process.cwd(), "data", "suggestions");
+
+function buildDescriptionModalFields() {
+  return [
+    { id: "description", label: "Descrição", style: "paragraph", minLength: 10, maxLength: 900, required: true },
+  ];
+}
 
 const ticketModalFields = {
-  doubts: [
-    { id: "minecraftNick", label: "Nick no Minecraft", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "question", label: "Sua duvida", style: "paragraph", minLength: 5, maxLength: 700, required: true },
-    { id: "details", label: "Detalhes", style: "paragraph", maxLength: 900, required: false },
-  ],
-  bugs: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "bug", label: "Bug encontrado", style: "paragraph", minLength: 5, maxLength: 700, required: true },
-    { id: "howItHappened", label: "Como ocorreu", style: "paragraph", minLength: 5, maxLength: 700, required: true },
-    { id: "reproduce", label: "Como reproduzir", style: "paragraph", maxLength: 900, required: false },
-    { id: "serverVersion", label: "Versao/servidor", style: "short", maxLength: 80, required: false },
-  ],
-  report: [
-    { id: "minecraftNick", label: "Seu nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "reportedNick", label: "Nick denunciado", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "reason", label: "Motivo", style: "short", minLength: 3, maxLength: 120, required: true },
-    { id: "description", label: "Descricao", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-    { id: "proof", label: "Provas", style: "paragraph", maxLength: 900, required: false },
-  ],
-  appeal: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "punishment", label: "Punicao", style: "short", minLength: 3, maxLength: 120, required: true },
-    { id: "reason", label: "Motivo da apelacao", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-    { id: "proof", label: "Provas", style: "paragraph", maxLength: 900, required: false },
-  ],
-  password: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "accountInfo", label: "Informacoes necessarias", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-    { id: "description", label: "Descricao do problema", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-  ],
-  donation: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "product", label: "Produto", style: "short", minLength: 2, maxLength: 120, required: true },
-    { id: "date", label: "Data", style: "short", maxLength: 80, required: true },
-    { id: "paymentMethod", label: "Forma de pagamento", style: "short", maxLength: 120, required: true },
-    { id: "problem", label: "Problema", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-  ],
-  coordination: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "subject", label: "Assunto", style: "short", minLength: 3, maxLength: 120, required: true },
-    { id: "description", label: "Descricao", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-  ],
-  other: [
-    { id: "minecraftNick", label: "Nick", style: "short", minLength: 3, maxLength: 32, required: true },
-    { id: "subject", label: "Assunto", style: "short", minLength: 3, maxLength: 120, required: true },
-    { id: "description", label: "Descricao", style: "paragraph", minLength: 10, maxLength: 900, required: true },
-  ],
+  doubts: buildDescriptionModalFields(),
+  bugs: buildDescriptionModalFields(),
+  report: buildDescriptionModalFields(),
+  appeal: buildDescriptionModalFields(),
+  password: buildDescriptionModalFields(),
+  donation: buildDescriptionModalFields(),
+  coordination: buildDescriptionModalFields(),
+  other: buildDescriptionModalFields(),
 };
 
 const config = {
@@ -196,6 +164,17 @@ const config = {
       ).trim(),
     },
   },
+  suggestions: {
+    enabled: true,
+    dataDir: suggestionDataDir,
+    panelMessageFilePath: path.join(suggestionDataDir, "panel-message.json"),
+    storeFilePath: path.join(suggestionDataDir, "suggestions.json"),
+    panelChannelId: "",
+    channelId: "",
+    approvedChannelId: "1541872816788349038",
+    bannerUrl: "https://i.imgur.com/QVwKl06.jpeg",
+    accentColor: parseHexColorInt("", "00D1B2"),
+  },
   tickets: {
     enabled: parseBoolean(process.env.TICKETS_ENABLED, true),
     dataDir: ticketDataDir,
@@ -230,6 +209,7 @@ const config = {
       doubts: {
         name: "Tirar dúvidas",
         discordCategoryName: "📂・DÚVIDAS",
+        channelPrefix: "duvida",
         emoji: "🤔",
         description: "Obter esclarecimento sobre quaisquer dúvidas.",
         order: 1,
@@ -239,6 +219,7 @@ const config = {
       bugs: {
         name: "Reportar erros",
         discordCategoryName: "📂・REPORTAR-ERROS",
+        channelPrefix: "erro",
         emoji: "🛠️",
         description: "Reportar um erro/bug encontrado.",
         order: 2,
@@ -248,6 +229,7 @@ const config = {
       report: {
         name: "Denunciar",
         discordCategoryName: "📂・DENÚNCIAS",
+        channelPrefix: "denuncia",
         emoji: "📢",
         description: "Reportar um(a) jogador(a).",
         order: 3,
@@ -257,6 +239,7 @@ const config = {
       appeal: {
         name: "Apelar punição",
         discordCategoryName: "📂・APELAÇÕES",
+        channelPrefix: "apelacao",
         emoji: "⚖️",
         description: "Apele uma punição.",
         order: 4,
@@ -266,6 +249,7 @@ const config = {
       password: {
         name: "Esqueci a minha senha",
         discordCategoryName: "📂・RECUPERAÇÃO",
+        channelPrefix: "senha",
         emoji: "🔐",
         description: "Recuperar senha da conta.",
         order: 5,
@@ -275,6 +259,7 @@ const config = {
       donation: {
         name: "Problemas com doações em nosso site",
         discordCategoryName: "📂・DOAÇÕES",
+        channelPrefix: "doacao",
         emoji: "🛒",
         description: "Relatar problemas com doações.",
         order: 6,
@@ -284,6 +269,7 @@ const config = {
       coordination: {
         name: "Falar apenas com a Coordenação",
         discordCategoryName: "📂・COORDENAÇÃO",
+        channelPrefix: "coordenacao",
         emoji: "👑",
         description: "Falar diretamente com a coordenação do servidor.",
         order: 7,
@@ -293,6 +279,7 @@ const config = {
       other: {
         name: "Outro assunto não listado",
         discordCategoryName: "📂・OUTROS",
+        channelPrefix: "outro",
         emoji: "🔎",
         description: "Abrir um ticket para outro assunto.",
         order: 8,
