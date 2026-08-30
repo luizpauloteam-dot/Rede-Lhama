@@ -62,7 +62,7 @@ function resolveWaitLevel(openTicketCount) {
   return "muito alto";
 }
 
-function normalizeTicketChannelName(value) {
+function normalizeDiscordName(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
@@ -74,22 +74,23 @@ function normalizeTicketChannelName(value) {
     .slice(0, 90);
 }
 
-function buildTicketChannelName(categoryType, user) {
-  const categoryConfig = getTicketCategoryConfig(categoryType) || {};
-  const categoryName = normalizeTicketChannelName(categoryConfig.channelPrefix || categoryConfig.name || categoryType);
-  const userName = normalizeTicketChannelName(user?.username || user?.globalName || user?.id || "usuario");
+function buildTicketThreadName(ticket, user = null) {
+  const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
+  const ticketNumber = formatTicketNumber(ticket.ticketNumber);
+  const categoryName = normalizeDiscordName(categoryConfig.threadPrefix || categoryConfig.name || ticket.categoryType);
+  const userName = normalizeDiscordName(user?.username || user?.globalName || ticket.userId || "usuario");
 
-  return normalizeTicketChannelName(`${categoryName || "ticket"}-${userName || "usuario"}`);
+  return normalizeDiscordName(`${ticketNumber}-${categoryName || "ticket"}-${userName || "usuario"}`) || `ticket-${ticketNumber}`;
 }
 
 module.exports = {
-  buildTicketChannelName,
+  buildTicketThreadName,
   escapeDiscordText,
   escapeHtml,
   formatDateTime,
   formatTicketNumber,
   getTicketCategoryConfig,
   listTicketCategoryEntries,
-  normalizeTicketChannelName,
+  normalizeDiscordName,
   resolveWaitLevel,
 };

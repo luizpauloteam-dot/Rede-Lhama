@@ -2,6 +2,7 @@ const { AttachmentBuilder } = require("discord.js");
 
 const config = require("../config");
 const { createLogger } = require("./logger");
+const { TicketMessage } = require("./ticket-models");
 const {
   escapeHtml,
   formatDateTime,
@@ -25,77 +26,49 @@ async function fetchTranscriptChannel(client) {
     (await client.channels.fetch(config.tickets.transcriptChannelId).catch(() => null));
 
   if (!channel?.isTextBased?.() || typeof channel.send !== "function") {
-    log.warn(`Canal de transcrição inválido ou inacessível: ${config.tickets.transcriptChannelId}`);
+    log.warn(`Canal de transcricao invalido ou inacessivel: ${config.tickets.transcriptChannelId}`);
     return null;
   }
 
   return channel;
 }
 
-async function fetchAllMessages(channel) {
-  const messages = [];
-  let before;
-
-  for (;;) {
-    const batch = await channel.messages
-      .fetch({
-        limit: 100,
-        before,
-      })
-      .catch((error) => {
-        log.warn(`Não foi possível buscar mensagens do canal ${channel.id}.`, error);
-        return null;
-      });
-
-    if (!batch?.size) {
-      break;
-    }
-
-    messages.push(...batch.values());
-    before = batch.last().id;
-
-    if (batch.size < 100) {
-      break;
-    }
-  }
-
-  return messages.sort((left, right) => left.createdTimestamp - right.createdTimestamp);
-}
-
-function isImageAttachment(attachment) {
-  if (String(attachment.contentType || "").startsWith("image/")) {
-    return true;
-  }
-
-  return /\.(png|jpe?g|gif|webp)$/i.test(String(attachment.url || ""));
-}
-
 function renderAttachment(attachment) {
   const url = escapeHtml(attachment.url);
   const name = escapeHtml(attachment.name || "anexo");
+  const isImage = String(attachment.contentType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(url);
 
-  if (isImageAttachment(attachment)) {
+  if (isImage) {
     return `<a href="${url}" target="_blank" rel="noreferrer"><img class="attachment-image" src="${url}" alt="${name}"></a>`;
   }
 
   return `<a class="attachment-file" href="${url}" target="_blank" rel="noreferrer">${name}</a>`;
 }
 
-function renderMessage(message) {
-  const author = message.author;
-  const avatarUrl = author.displayAvatarURL?.({ extension: "png", size: 64 }) || "";
-  const content = escapeHtml(message.cleanContent || message.content || "").replace(/\n/g, "<br>");
-  const attachments = [...message.attachments.values()].map(renderAttachment).join("");
-  const reply = message.reference?.messageId
-    ? `<div class="reply">Resposta para mensagem ${escapeHtml(message.reference.messageId)}</div>`
-    : "";
+function getDirectionLabel(direction) {
+  if (direction === "user_to_staff") {
+    return "Jogador para staff";
+  }
+
+  if (direction === "staff_to_user") {
+    return "Staff para jogador";
+  }
+
+  return "Sistema";
+}
+
+function renderMessage(entry) {
+  const content = escapeHtml(entry.content || "").replace(/\n/g, "<br>");
+  const attachments = (entry.attachments || []).map(renderAttachment).join("");
 
   return [
-    '<article class="message">',
-    `<img class="avatar" src="${escapeHtml(avatarUrl)}" alt="">`,
+    `<article class="message ${escapeHtml(entry.direction)}">`,
     '<div class="message-body">',
-    `<header><strong>${escapeHtml(author.tag || author.username)}</strong><span>${escapeHtml(formatDateTime(message.createdAt))}</span></header>`,
-    reply,
+    "<header>",
+    `<strong>${escapeHtml(entry.authorTag || entry.authorId || "Sistema")}</strong>`,
+    `<span>${escapeHtml(getDirectionLabel(entry.direction))}</span>`,
+    `<time>${escapeHtml(formatDateTime(entry.createdAt))}</time>`,
+    "</header>",
     content ? `<div class="content">${content}</div>` : "",
     attachments ? `<div class="attachments">${attachments}</div>` : "",
     "</div>",
@@ -103,7 +76,7 @@ function renderMessage(message) {
   ].join("");
 }
 
-function renderTranscriptHtml({ ticket, channel, messages }) {
+function renderTranscriptHtml({ ticket, messages }) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const title = `Ticket #${formatTicketNumber(ticket.ticketNumber)}`;
 
@@ -118,14 +91,12 @@ function renderTranscriptHtml({ ticket, channel, messages }) {
     "body{margin:0;background:#111816;color:#ecf4f1;font-family:Inter,Segoe UI,Arial,sans-serif;}",
     ".wrap{max-width:980px;margin:0 auto;padding:32px 18px 56px;}",
     ".summary{border-left:5px solid #00d1b2;background:#1f2926;border-radius:8px;padding:18px;margin-bottom:18px;}",
-    "h1{font-size:26px;margin:0 0 12px;} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}",
-    ".item{background:#17211e;border:1px solid #2f3d39;border-radius:6px;padding:10px;} .label{color:#aab8b3;font-size:12px;text-transform:uppercase;letter-spacing:.04em;}",
-    ".message{display:flex;gap:12px;border-bottom:1px solid #24312d;padding:14px 0;}",
-    ".avatar{width:42px;height:42px;border-radius:50%;background:#2a3531;flex:0 0 auto;}",
-    ".message-body{min-width:0;flex:1;} header{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;} header span{color:#9fb0aa;font-size:13px;}",
-    ".content{white-space:normal;line-height:1.45;margin-top:5px;word-break:break-word;} .reply{color:#9fb0aa;font-size:13px;margin-top:4px;}",
-    ".attachments{display:flex;flex-direction:column;gap:8px;margin-top:8px;} .attachment-image{max-width:min(520px,100%);border-radius:6px;border:1px solid #33423e;}",
-    ".attachment-file{color:#73d7ff;text-decoration:none;}",
+    "h1{font-size:26px;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}",
+    ".item{background:#17211e;border:1px solid #2f3d39;border-radius:6px;padding:10px}.label{color:#aab8b3;font-size:12px;text-transform:uppercase;letter-spacing:.04em}",
+    ".message{border-bottom:1px solid #24312d;padding:14px 0}.message-body{min-width:0}",
+    "header{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}header span,header time{color:#9fb0aa;font-size:13px}",
+    ".content{white-space:normal;line-height:1.45;margin-top:5px;word-break:break-word}.attachments{display:flex;flex-direction:column;gap:8px;margin-top:8px}",
+    ".attachment-image{max-width:min(520px,100%);border-radius:6px;border:1px solid #33423e}.attachment-file{color:#73d7ff;text-decoration:none}",
     "</style>",
     "</head>",
     "<body>",
@@ -133,29 +104,28 @@ function renderTranscriptHtml({ ticket, channel, messages }) {
     '<section class="summary">',
     `<h1>${escapeHtml(title)}</h1>`,
     '<div class="grid">',
-    `<div class="item"><div class="label">Canal</div>${escapeHtml(channel.name)}</div>`,
     `<div class="item"><div class="label">Categoria</div>${escapeHtml(categoryConfig.name || ticket.categoryType)}</div>`,
-    `<div class="item"><div class="label">Aberto por</div>${escapeHtml(ticket.ownerId)}</div>`,
-    `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Não informado")}</div>`,
+    `<div class="item"><div class="label">Jogador</div>${escapeHtml(ticket.userId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Status</div>${escapeHtml(ticket.status)}</div>`,
+    `<div class="item"><div class="label">Thread staff</div>${escapeHtml(ticket.staffThreadId || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Aberto em</div>${escapeHtml(formatDateTime(ticket.createdAt))}</div>`,
-    `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Não informado")}</div>`,
-    `<div class="item"><div class="label">Fechado por</div>${escapeHtml(ticket.closedBy || "Não informado")}</div>`,
-    `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Não informado")}</div>`,
+    `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Nao informado")}</div>`,
     "</div>",
     "</section>",
-    messages.map(renderMessage).join(""),
+    messages.length ? messages.map(renderMessage).join("") : '<p class="empty">Nenhuma mensagem registrada.</p>',
     "</main>",
     "</body>",
     "</html>",
   ].join("");
 }
 
-async function generateAndSendTranscript(client, channel, ticket) {
+async function generateAndSendTranscript(client, ticket) {
   const transcriptChannel = await fetchTranscriptChannel(client);
-  const messages = await fetchAllMessages(channel);
+  const messages = await TicketMessage.find({ ticketId: ticket.ticketId }).sort({ createdAt: 1 });
   const html = renderTranscriptHtml({
     ticket,
-    channel,
     messages,
   });
   const filename = `ticket-${formatTicketNumber(ticket.ticketNumber)}.html`;
@@ -172,12 +142,12 @@ async function generateAndSendTranscript(client, channel, ticket) {
 
   const message = await transcriptChannel
     .send({
-      content: `Transcrição do ticket #${formatTicketNumber(ticket.ticketNumber)}.`,
+      content: `Transcricao do ticket #${formatTicketNumber(ticket.ticketNumber)}.`,
       files: [attachment],
       allowedMentions: SAFE_ALLOWED_MENTIONS,
     })
     .catch((error) => {
-      log.warn(`Não foi possível enviar transcrição do ticket ${ticket.ticketId}.`, error);
+      log.warn(`Nao foi possivel enviar transcricao do ticket ${ticket.ticketId}.`, error);
       return null;
     });
 

@@ -1,8 +1,8 @@
 const { Events } = require("discord.js");
 
 const {
-  handleTicketChannelDelete,
   handleTicketInteraction,
+  handleTicketMessage,
   initializeTickets,
 } = require("../utils/ticket-manager");
 
@@ -17,7 +17,7 @@ module.exports = [
     execute: handleTicketInteraction,
   },
   {
-    name: Events.ChannelDelete,
-    execute: handleTicketChannelDelete,
+    name: Events.MessageCreate,
+    execute: handleTicketMessage,
   },
 ];

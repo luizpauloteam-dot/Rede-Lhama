@@ -16,7 +16,7 @@ const {
   buildSuggestionPostComponents,
   buildSuggestionThreadComponents,
 } = require("./suggestion-components");
-const { normalizeTicketChannelName } = require("./ticket-common");
+const { normalizeDiscordName } = require("./ticket-common");
 const { isTicketAdministrator } = require("./ticket-permissions");
 
 const log = createLogger("suggestions");
@@ -218,7 +218,7 @@ function buildApprovedMessageComponents(suggestion, implementedById) {
 }
 
 function buildSuggestionThreadName(title) {
-  return normalizeTicketChannelName(`sugestao-${title}`).slice(0, 90) || "sugestao";
+  return normalizeDiscordName(`sugestao-${title}`).slice(0, 90) || "sugestao";
 }
 
 async function updateSuggestionMessage(client, suggestion) {

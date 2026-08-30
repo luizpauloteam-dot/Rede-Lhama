@@ -7,9 +7,11 @@ const {
 const {
   addBlacklistEntry,
   closeTicketFromCommand,
-  deleteTicketFromCommand,
+  pauseTicketFromCommand,
   removeBlacklistEntry,
   reopenTicketFromCommand,
+  resumeTicketFromCommand,
+  sendTranscriptFromCommand,
   showBlacklistEntry,
   showTicketInfo,
   upsertSupportPanel,
@@ -44,7 +46,7 @@ async function replyEphemeral(interaction, content) {
 
 async function handlePanelCommand(client, interaction) {
   if (!isTicketAdministrator(interaction.member)) {
-    await replyEphemeral(interaction, "Você não possui permissão para publicar o painel de tickets.");
+    await replyEphemeral(interaction, "Voce nao possui permissao para publicar o painel de tickets.");
     return;
   }
 
@@ -57,7 +59,7 @@ async function handlePanelCommand(client, interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ticket")
-    .setDescription("Gerencia o sistema de tickets da Rede Lhama.")
+    .setDescription("Gerencia o sistema ModMail de tickets da Rede Lhama.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("painel")
@@ -65,7 +67,7 @@ module.exports = {
         .addChannelOption((option) =>
           option
             .setName("canal")
-            .setDescription("Canal onde o painel será publicado.")
+            .setDescription("Canal onde o painel sera publicado.")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(false),
         ),
@@ -73,12 +75,12 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informações do ticket neste canal."),
+        .setDescription("Mostra informacoes do ticket na thread atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("fechar")
-        .setDescription("Fecha o ticket neste canal.")
+        .setDescription("Fecha o ticket da thread atual.")
         .addStringOption((option) =>
           option
             .setName("motivo")
@@ -89,22 +91,32 @@ module.exports = {
     )
     .addSubcommand((subcommand) =>
       subcommand
-        .setName("reabrir")
-        .setDescription("Reabre o ticket neste canal."),
+        .setName("pausar")
+        .setDescription("Pausa o ticket da thread atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
-        .setName("excluir")
-        .setDescription("Gera a transcrição e exclui definitivamente o canal do ticket."),
+        .setName("retomar")
+        .setDescription("Retoma o ticket pausado da thread atual."),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("reabrir")
+        .setDescription("Reabre o ticket fechado da thread atual."),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("transcript")
+        .setDescription("Gera a transcricao do ticket da thread atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-adicionar")
-        .setDescription("Impede um usuário de abrir tickets.")
+        .setDescription("Impede um usuario de abrir tickets.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuário que será bloqueado.")
+            .setDescription("Usuario que sera bloqueado.")
             .setRequired(true),
         )
         .addStringOption((option) =>
@@ -117,13 +129,13 @@ module.exports = {
         .addBooleanOption((option) =>
           option
             .setName("permanente")
-            .setDescription("Define se o bloqueio será permanente.")
+            .setDescription("Define se o bloqueio sera permanente.")
             .setRequired(false),
         )
         .addIntegerOption((option) =>
           option
             .setName("dias")
-            .setDescription("Duração em dias quando não for permanente.")
+            .setDescription("Duracao em dias quando nao for permanente.")
             .setMinValue(1)
             .setMaxValue(3650)
             .setRequired(false),
@@ -132,22 +144,22 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-remover")
-        .setDescription("Remove um usuário da blacklist de tickets.")
+        .setDescription("Remove um usuario da blacklist de tickets.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuário que será liberado.")
+            .setDescription("Usuario que sera liberado.")
             .setRequired(true),
         ),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("blacklist-info")
-        .setDescription("Consulta a blacklist de um usuário.")
+        .setDescription("Consulta a blacklist de um usuario.")
         .addUserOption((option) =>
           option
             .setName("usuario")
-            .setDescription("Usuário consultado.")
+            .setDescription("Usuario consultado.")
             .setRequired(true),
         ),
     ),
@@ -170,13 +182,23 @@ module.exports = {
       return;
     }
 
+    if (subcommand === "pausar") {
+      await pauseTicketFromCommand(client, interaction);
+      return;
+    }
+
+    if (subcommand === "retomar") {
+      await resumeTicketFromCommand(client, interaction);
+      return;
+    }
+
     if (subcommand === "reabrir") {
       await reopenTicketFromCommand(client, interaction);
       return;
     }
 
-    if (subcommand === "excluir") {
-      await deleteTicketFromCommand(client, interaction);
+    if (subcommand === "transcript") {
+      await sendTranscriptFromCommand(client, interaction);
       return;
     }
 
