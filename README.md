@@ -119,7 +119,7 @@ Cada sugestao publicada cria um topico para conversa, mostra botoes de voto na m
 
 ## Sistema de tickets
 
-O bot usa um sistema ModMail com MongoDB/Mongoose e Components v2. O jogador abre o atendimento pelo painel e conversa somente pela DM do bot. A equipe responde dentro de uma thread/post em um Forum Channel privado no servidor interno `1541296952514187397`.
+O bot usa um sistema ModMail com MongoDB/Mongoose e Components v2. O jogador abre o atendimento pelo painel e conversa somente pela DM do bot. A equipe responde dentro de um canal privado criado na categoria interna `1543498767112732692`, no servidor `1541296952514187397`.
 
 Configure ao menos:
 
@@ -127,10 +127,11 @@ Configure ao menos:
 MONGODB_URI=mongodb+srv://usuario:senha@cluster/banco
 DISCORD_TICKET_GUILD_ID=1541296952514187397
 DISCORD_TICKET_PANEL_CHANNEL_ID=ID_DO_CANAL_DO_PAINEL
-DISCORD_TICKET_STAFF_FORUM_CHANNEL_ID=ID_DO_FORUM_PRIVADO_DA_STAFF
+DISCORD_TICKET_STAFF_CATEGORY_ID=1543498767112732692
 DISCORD_TICKET_SUPPORT_ROLE_IDS=ID_CARGO_STAFF
 DISCORD_TICKET_COORDINATION_ROLE_IDS=ID_CARGO_COORDENACAO
 DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS=ID_CARGO_ADMIN
+DISCORD_TICKET_VIEW_ALL_ROLE_IDS=1543506338603204618
 DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID=ID_CANAL_TRANSCRIPTS
 DISCORD_TICKET_LOG_CHANNEL_ID=ID_CANAL_LOGS
 DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
@@ -140,9 +141,17 @@ Depois de iniciar o bot, use:
 
 ```txt
 /ticket painel
+/ticket limpar-dm
+/ticket limpar-banco escopo:ticket-atual confirmar:CONFIRMAR
+/ticket limpar-banco escopo:usuario usuario:@usuario confirmar:CONFIRMAR
+/ticket limpar-banco escopo:todos confirmar:CONFIRMAR
 ```
 
-Comandos de staff dentro da thread:
+`/ticket limpar-dm` apaga mensagens recentes enviadas pelo bot na DM de quem executou o comando. O Discord nao permite que o bot apague mensagens enviadas pelo proprio usuario.
+`/ticket limpar-banco` apaga registros persistidos do sistema de tickets no MongoDB. Apenas administradores podem usar, funciona somente no servidor `1541296952514187397`, e o campo `confirmar` precisa ser exatamente `CONFIRMAR`. Essa limpeza nao apaga canais, mensagens ja enviadas no Discord ou arquivos de transcript ja publicados.
+Quem tiver um cargo configurado em `DISCORD_TICKET_VIEW_ALL_ROLE_IDS` pode ver todos os canais internos de ticket e e mencionado quando um ticket novo abre.
+
+Comandos de staff dentro do canal interno:
 
 ```txt
 /ticket info
@@ -153,7 +162,7 @@ Comandos de staff dentro da thread:
 /ticket transcript
 ```
 
-Ao fechar, o transcript e gerado a partir das mensagens salvas no MongoDB, a avaliacao e enviada por DM para quem abriu o atendimento, e o sistema nao cria canais privados nem categorias automaticas para jogadores. Tickets ativos do sistema anterior sao preservados e marcados como `legacy_closed` na inicializacao para impedir convivencia entre as duas arquiteturas.
+Ao fechar, o transcript e gerado a partir das mensagens salvas no MongoDB, a avaliacao e enviada por DM para quem abriu o atendimento, e o sistema nao cria canais privados acessiveis ao jogador nem categorias automaticas. Tickets ativos do sistema anterior sao preservados e marcados como `legacy_closed` na inicializacao para impedir convivencia entre as duas arquiteturas.
 
 ## Comandos por mensagem
 

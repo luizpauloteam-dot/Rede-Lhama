@@ -35,6 +35,9 @@ const TICKET_CUSTOM_IDS = {
   closePrefix: "ticket:close",
   closeConfirmPrefix: "ticket:close-confirm",
   closeCancelPrefix: "ticket:close-cancel",
+  deletePrefix: "ticket:delete",
+  deleteConfirmPrefix: "ticket:delete-confirm",
+  deleteCancelPrefix: "ticket:delete-cancel",
   managePrefix: "ticket:manage",
   reopenPrefix: "ticket:reopen",
   reviewPrefix: "ticket:review",
@@ -227,7 +230,7 @@ function buildStaffActionRow(ticket) {
   return row.toJSON();
 }
 
-function buildStaffThreadComponents(ticket) {
+function buildStaffChannelComponents(ticket) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const categoryName = categoryConfig.name || ticket.categoryType;
   const assignedStaff = ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Aguardando";
@@ -258,7 +261,7 @@ function buildStaffThreadComponents(ticket) {
 
   components.push(
     buildSeparator(),
-    buildText("Responda nesta thread para enviar mensagem ao jogador por DM."),
+    buildText("Responda neste canal para enviar mensagem ao jogador por DM."),
     buildStaffActionRow(ticket),
   );
 
@@ -363,6 +366,23 @@ function buildCloseConfirmComponents(ticketId) {
   ];
 }
 
+function buildDeleteConfirmComponents(ticketId) {
+  return [
+    new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${TICKET_CUSTOM_IDS.deleteConfirmPrefix}:${ticketId}`)
+          .setLabel("Deletar")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`${TICKET_CUSTOM_IDS.deleteCancelPrefix}:${ticketId}`)
+          .setLabel("Cancelar")
+          .setStyle(ButtonStyle.Secondary),
+      )
+      .toJSON(),
+  ];
+}
+
 function buildTicketClosedComponents(ticket) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const closedBy = config.tickets.showStaffIdentity && ticket.closedBy ? `<@${ticket.closedBy}>` : "Equipe";
@@ -431,6 +451,10 @@ function buildTicketArchivedComponents(ticket) {
             .setCustomId(`${TICKET_CUSTOM_IDS.transcriptPrefix}:${ticket.ticketId}`)
             .setLabel("Transcript")
             .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`${TICKET_CUSTOM_IDS.deletePrefix}:${ticket.ticketId}`)
+            .setLabel("Deletar")
+            .setStyle(ButtonStyle.Danger),
         )
         .toJSON(),
     ],
@@ -560,9 +584,10 @@ module.exports = {
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
   buildCloseConfirmComponents,
+  buildDeleteConfirmComponents,
   buildDmWelcomeComponents,
   buildReviewModal,
-  buildStaffThreadComponents,
+  buildStaffChannelComponents,
   buildSupportPanelComponents,
   buildTicketArchivedComponents,
   buildTicketClosedComponents,

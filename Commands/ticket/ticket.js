@@ -6,6 +6,8 @@ const {
 
 const {
   addBlacklistEntry,
+  clearBotDmMessagesFromCommand,
+  clearTicketDatabaseFromCommand,
   closeTicketFromCommand,
   pauseTicketFromCommand,
   removeBlacklistEntry,
@@ -75,12 +77,63 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informacoes do ticket na thread atual."),
+        .setDescription("Mostra informacoes do ticket no canal atual."),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("limpar-dm")
+        .setDescription("Apaga mensagens recentes enviadas pelo bot na sua DM.")
+        .addIntegerOption((option) =>
+          option
+            .setName("quantidade")
+            .setDescription("Quantidade maxima de mensagens do bot para apagar.")
+            .setMinValue(1)
+            .setMaxValue(100)
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("limpar-banco")
+        .setDescription("Apaga registros do sistema de tickets no banco de dados.")
+        .addStringOption((option) =>
+          option
+            .setName("escopo")
+            .setDescription("Quais registros serao apagados.")
+            .setRequired(true)
+            .addChoices(
+              {
+                name: "Ticket atual",
+                value: "ticket-atual",
+              },
+              {
+                name: "Usuario",
+                value: "usuario",
+              },
+              {
+                name: "Tudo do sistema",
+                value: "todos",
+              },
+            ),
+        )
+        .addStringOption((option) =>
+          option
+            .setName("confirmar")
+            .setDescription("Digite CONFIRMAR para executar.")
+            .setMaxLength(20)
+            .setRequired(true),
+        )
+        .addUserOption((option) =>
+          option
+            .setName("usuario")
+            .setDescription("Usuario alvo quando o escopo for Usuario.")
+            .setRequired(false),
+        ),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("fechar")
-        .setDescription("Fecha o ticket da thread atual.")
+        .setDescription("Fecha o ticket do canal atual.")
         .addStringOption((option) =>
           option
             .setName("motivo")
@@ -92,22 +145,22 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName("pausar")
-        .setDescription("Pausa o ticket da thread atual."),
+        .setDescription("Pausa o ticket do canal atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("retomar")
-        .setDescription("Retoma o ticket pausado da thread atual."),
+        .setDescription("Retoma o ticket pausado do canal atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("reabrir")
-        .setDescription("Reabre o ticket fechado da thread atual."),
+        .setDescription("Reabre o ticket fechado do canal atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("transcript")
-        .setDescription("Gera a transcricao do ticket da thread atual."),
+        .setDescription("Gera a transcricao do ticket do canal atual."),
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -174,6 +227,20 @@ module.exports = {
 
     if (subcommand === "info") {
       await showTicketInfo(interaction);
+      return;
+    }
+
+    if (subcommand === "limpar-dm") {
+      await clearBotDmMessagesFromCommand(client, interaction, interaction.options.getInteger("quantidade"));
+      return;
+    }
+
+    if (subcommand === "limpar-banco") {
+      await clearTicketDatabaseFromCommand(client, interaction, {
+        confirmation: interaction.options.getString("confirmar", true),
+        scope: interaction.options.getString("escopo", true),
+        user: interaction.options.getUser("usuario"),
+      });
       return;
     }
 

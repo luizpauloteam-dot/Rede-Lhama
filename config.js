@@ -184,7 +184,7 @@ const config = {
       path.join(ticketDataDir, "panel-message.json"),
     ),
     panelChannelId: String(process.env.DISCORD_TICKET_PANEL_CHANNEL_ID || "").trim(),
-    staffForumChannelId: String(process.env.DISCORD_TICKET_STAFF_FORUM_CHANNEL_ID || "").trim(),
+    staffCategoryId: String(process.env.DISCORD_TICKET_STAFF_CATEGORY_ID || "1543498767112732692").trim(),
     logChannelId: String(process.env.DISCORD_TICKET_LOG_CHANNEL_ID || process.env.DISCORD_LOG_CHANNEL_ID || "").trim(),
     transcriptChannelId: String(process.env.DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID || "").trim(),
     reviewChannelId: String(process.env.DISCORD_TICKET_REVIEW_CHANNEL_ID || "").trim(),
@@ -195,6 +195,7 @@ const config = {
     supportRoles: parseList(process.env.DISCORD_TICKET_SUPPORT_ROLE_IDS),
     coordinationRoles: parseList(process.env.DISCORD_TICKET_COORDINATION_ROLE_IDS),
     administratorRoles: parseList(process.env.DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS),
+    viewAllRoles: parseList(process.env.DISCORD_TICKET_VIEW_ALL_ROLE_IDS || "1543506338603204618"),
     bannerUrl: String(process.env.TICKET_PANEL_BANNER_URL || "https://i.imgur.com/QVwKl06.jpeg").trim(),
     closedBannerUrl: String(process.env.TICKET_CLOSED_BANNER_URL || "https://i.imgur.com/QVwKl06.jpeg").trim(),
     accentColor: parseHexColorInt(process.env.TICKET_ACCENT_COLOR, "00D1B2"),
@@ -206,7 +207,7 @@ const config = {
     categories: {
       doubts: {
         name: "Tirar duvidas",
-        threadPrefix: "duvida",
+        staffChannelPrefix: "duvida",
         emoji: "❔",
         description: "Obter esclarecimento sobre duvidas.",
         order: 1,
@@ -215,7 +216,7 @@ const config = {
       },
       bugs: {
         name: "Reportar erros",
-        threadPrefix: "erro",
+        staffChannelPrefix: "erro",
         emoji: "🛠️",
         description: "Reportar um erro ou bug encontrado.",
         order: 2,
@@ -224,7 +225,7 @@ const config = {
       },
       report: {
         name: "Denunciar",
-        threadPrefix: "denuncia",
+        staffChannelPrefix: "denuncia",
         emoji: "📢",
         description: "Reportar um jogador.",
         order: 3,
@@ -233,7 +234,7 @@ const config = {
       },
       appeal: {
         name: "Apelar punicao",
-        threadPrefix: "apelacao",
+        staffChannelPrefix: "apelacao",
         emoji: "⚖️",
         description: "Solicitar revisao de punicao.",
         order: 4,
@@ -242,7 +243,7 @@ const config = {
       },
       password: {
         name: "Esqueci a minha senha",
-        threadPrefix: "senha",
+        staffChannelPrefix: "senha",
         emoji: "🔐",
         description: "Recuperar senha da conta.",
         order: 5,
@@ -251,7 +252,7 @@ const config = {
       },
       donation: {
         name: "Problemas com doacoes em nosso site",
-        threadPrefix: "doacao",
+        staffChannelPrefix: "doacao",
         emoji: "🛒",
         description: "Relatar problemas com doacoes.",
         order: 6,
@@ -260,7 +261,7 @@ const config = {
       },
       coordination: {
         name: "Falar apenas com a Coordenacao",
-        threadPrefix: "coordenacao",
+        staffChannelPrefix: "coordenacao",
         emoji: "👑",
         description: "Falar diretamente com a coordenacao.",
         order: 7,
@@ -269,7 +270,7 @@ const config = {
       },
       other: {
         name: "Outro assunto nao listado",
-        threadPrefix: "outro",
+        staffChannelPrefix: "outro",
         emoji: "🔎",
         description: "Abrir um ticket para outro assunto.",
         order: 8,

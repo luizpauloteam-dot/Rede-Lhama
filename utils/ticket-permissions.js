@@ -15,10 +15,7 @@ function hasAnyConfiguredRole(member, roleIds) {
 }
 
 function hasStaffFallbackPermission(member) {
-  return Boolean(
-    member?.permissions?.has(PermissionsBitField.Flags.ManageMessages) ||
-      member?.permissions?.has(PermissionsBitField.Flags.ManageThreads),
-  );
+  return Boolean(member?.permissions?.has(PermissionsBitField.Flags.ManageMessages));
 }
 
 function isTicketAdministrator(member) {

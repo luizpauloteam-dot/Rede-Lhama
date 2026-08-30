@@ -61,11 +61,11 @@ const TicketSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    staffForumChannelId: {
+    staffCategoryId: {
       type: String,
       default: "",
     },
-    staffThreadId: {
+    staffChannelId: {
       type: String,
       default: "",
     },
@@ -138,10 +138,10 @@ const TicketSchema = new mongoose.Schema(
   },
 );
 
-TicketSchema.index({ guildId: 1, staffThreadId: 1 }, {
+TicketSchema.index({ guildId: 1, staffChannelId: 1 }, {
   unique: true,
   partialFilterExpression: {
-    staffThreadId: {
+    staffChannelId: {
       $gt: "",
     },
   },

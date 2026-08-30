@@ -108,7 +108,7 @@ function renderTranscriptHtml({ ticket, messages }) {
     `<div class="item"><div class="label">Jogador</div>${escapeHtml(ticket.userId || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Status</div>${escapeHtml(ticket.status)}</div>`,
-    `<div class="item"><div class="label">Thread staff</div>${escapeHtml(ticket.staffThreadId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Canal staff</div>${escapeHtml(ticket.staffChannelId || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Aberto em</div>${escapeHtml(formatDateTime(ticket.createdAt))}</div>`,
     `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Nao informado")}</div>`,
     `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Nao informado")}</div>`,
