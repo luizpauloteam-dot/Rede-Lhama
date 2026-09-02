@@ -206,10 +206,10 @@ function buildSuggestionMessageComponents(suggestion) {
 
 function buildApprovedMessageComponents(suggestion, implementedById) {
   return buildApprovedSuggestionComponents({
+    suggestionId: suggestion.messageId,
     title: suggestion.title,
     description: suggestion.description,
     userId: suggestion.userId,
-    userAvatarUrl: suggestion.userAvatarUrl,
     implementedById,
     guildId: suggestion.guildId,
     threadId: suggestion.threadId,

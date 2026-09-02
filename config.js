@@ -170,9 +170,9 @@ const config = {
     panelMessageFilePath: path.join(suggestionDataDir, "panel-message.json"),
     storeFilePath: path.join(suggestionDataDir, "suggestions.json"),
     panelChannelId: "",
-    channelId: "",
+    channelId: String(process.env.DISCORD_SUGGESTION_CHANNEL_ID || "1541872794030178425").trim(),
     approvedChannelId: "1541872816788349038",
-    bannerUrl: "https://i.imgur.com/QVwKl06.jpeg",
+    bannerUrl: String(process.env.SUGGESTION_PANEL_BANNER_URL || "https://i.imgur.com/w594Pwm.png").trim(),
     accentColor: parseHexColorInt("", "00D1B2"),
   },
   tickets: {

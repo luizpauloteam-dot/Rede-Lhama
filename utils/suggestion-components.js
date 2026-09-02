@@ -22,6 +22,7 @@ const SUGGESTION_CUSTOM_IDS = {
   voteUpPrefix: "suggestion:vote-up",
   voteDownPrefix: "suggestion:vote-down",
   implementPrefix: "suggestion:implement",
+  approvedBadgePrefix: "suggestion:approved-badge",
 };
 
 function buildText(content) {
@@ -66,6 +67,28 @@ function buildThumbnail(url, description) {
     .setURL(url)
     .setDescription(description)
     .toJSON();
+}
+
+function buildApprovedBadge(suggestionId, threadId) {
+  return new ButtonBuilder()
+    .setCustomId(`${SUGGESTION_CUSTOM_IDS.approvedBadgePrefix}:${suggestionId || threadId || "ok"}`)
+    .setLabel("Aprovada")
+    .setEmoji("✅")
+    .setStyle(ButtonStyle.Success)
+    .setDisabled(true)
+    .toJSON();
+}
+
+function buildThreadLinkButton(guildId, threadId) {
+  if (!guildId || !threadId) {
+    return null;
+  }
+
+  return new ButtonBuilder()
+    .setLabel("Ver tópico")
+    .setEmoji("💬")
+    .setStyle(ButtonStyle.Link)
+    .setURL(`https://discord.com/channels/${guildId}/${threadId}`);
 }
 
 function buildSuggestionPanelComponents() {
@@ -272,10 +295,10 @@ function buildSuggestionThreadComponents({ suggestionId, implemented = false }) 
 }
 
 function buildApprovedSuggestionComponents({
+  suggestionId,
   title,
   description,
   userId,
-  userAvatarUrl,
   implementedById,
   upVotes = 0,
   downVotes = 0,
@@ -284,31 +307,36 @@ function buildApprovedSuggestionComponents({
 }) {
   const safeTitle = escapeDiscordText(title);
   const safeDescription = escapeDiscordText(description);
-  const authorThumbnail = buildThumbnail(userAvatarUrl, "Avatar de quem enviou a sugestão");
+  const threadButton = buildThreadLinkButton(guildId, threadId);
   const components = [
-    authorThumbnail
-      ? {
-          type: ComponentType.Section,
-          components: [
-            buildText("# Sugestão aprovada"),
-            buildText(`Enviada por <@${userId}>`),
-          ],
-          accessory: authorThumbnail,
-        }
-      : buildText(["# Sugestão aprovada", `Enviada por <@${userId}>`].join("\n")),
+    {
+      type: ComponentType.Section,
+      components: [
+        buildText("# Sugestão aprovada"),
+        buildText(`Enviada por <@${userId}>`),
+      ],
+      accessory: buildApprovedBadge(suggestionId, threadId),
+    },
     buildSeparator(),
-    buildText([`**${safeTitle}**`, safeDescription].join("\n")),
+    buildText([`## ${safeTitle}`, safeDescription].join("\n")),
     buildSeparator(),
     buildText(
       [
-        `**Aprovada por:** <@${implementedById}>`,
-        `**Votos:** ✅ ${upVotes} | ❌ ${downVotes}`,
-        threadId && guildId ? `**Tópico:** https://discord.com/channels/${guildId}/${threadId}` : "",
+        `**Aprovada por** <@${implementedById}>`,
+        `**Votos** ${upVotes} a favor / ${downVotes} contra`,
       ]
-        .filter(Boolean)
         .join("\n"),
     ),
   ];
+
+  if (threadButton) {
+    components.push(
+      buildSeparator(),
+      new ActionRowBuilder()
+        .addComponents(threadButton)
+        .toJSON(),
+    );
+  }
 
   const container = new ContainerBuilder({
     accent_color: config.suggestions.accentColor,
