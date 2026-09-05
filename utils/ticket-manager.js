@@ -493,16 +493,17 @@ async function fetchPanelChannel(client, preferredChannel = null) {
     return preferredChannel;
   }
 
-  if (!config.tickets.panelChannelId) {
+  const channelId = config.tickets.panelChannelId || (await readPanelState())?.channelId;
+  if (!channelId) {
     return null;
   }
 
   const channel =
-    client.channels.cache.get(config.tickets.panelChannelId) ||
-    (await client.channels.fetch(config.tickets.panelChannelId).catch(() => null));
+    client.channels.cache.get(channelId) ||
+    (await client.channels.fetch(channelId).catch(() => null));
 
   if (!isSendableTextChannel(channel)) {
-    log.warn(`Canal de painel de tickets invalido ou inacessivel: ${config.tickets.panelChannelId}`);
+    log.warn(`Canal de painel de tickets invalido ou inacessivel: ${channelId}`);
     return null;
   }
 
