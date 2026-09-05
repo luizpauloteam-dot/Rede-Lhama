@@ -157,11 +157,7 @@ const config = {
     accentColor: parseHexColorInt(process.env.STATUS_ACCENT_COLOR),
     images: {
       on: String(process.env.STATUS_IMAGE_ON || defaultStatusImages.on).trim(),
-      manutencao: String(
-        process.env.STATUS_IMAGE_MANUTENCAO ||
-          process.env.STATUS_IMAGE_MAINTENANCE ||
-          defaultStatusImages.manutencao,
-      ).trim(),
+      manutencao: defaultStatusImages.manutencao,
     },
   },
   suggestions: {
@@ -172,7 +168,7 @@ const config = {
     panelChannelId: "",
     channelId: String(process.env.DISCORD_SUGGESTION_CHANNEL_ID || "1541872794030178425").trim(),
     approvedChannelId: "1541872816788349038",
-    bannerUrl: String(process.env.SUGGESTION_PANEL_BANNER_URL || "https://i.imgur.com/G5rKeYW.png").trim(),
+    bannerUrl: "https://i.imgur.com/w594Pwm.png",
     accentColor: parseHexColorInt("", "00D1B2"),
   },
   tickets: {
@@ -196,8 +192,8 @@ const config = {
     coordinationRoles: parseList(process.env.DISCORD_TICKET_COORDINATION_ROLE_IDS),
     administratorRoles: parseList(process.env.DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS),
     viewAllRoles: parseList(process.env.DISCORD_TICKET_VIEW_ALL_ROLE_IDS || "1543506338603204618"),
-    bannerUrl: String(process.env.TICKET_PANEL_BANNER_URL || "https://i.imgur.com/kX0lTKL.png").trim(),
-    closedBannerUrl: String(process.env.TICKET_CLOSED_BANNER_URL || "https://i.imgur.com/kX0lTKL.png").trim(),
+    bannerUrl: "https://i.imgur.com/kX0lTKL.png",
+    closedBannerUrl: "https://i.imgur.com/kX0lTKL.png",
     accentColor: parseHexColorInt(process.env.TICKET_ACCENT_COLOR, "00D1B2"),
     waitThresholds: {
       lowMax: parseNonNegativeInteger(process.env.TICKET_WAIT_LOW_MAX, 5),

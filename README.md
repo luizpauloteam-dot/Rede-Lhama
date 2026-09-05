@@ -88,7 +88,6 @@ STATUS_PANEL_TITLE=Em breve
 STATUS_PLAYERS=0/0
 STATUS_ACCENT_COLOR=FF6600
 STATUS_IMAGE_ON=https://i.imgur.com/sCfPQoR.jpeg
-STATUS_IMAGE_MANUTENCAO=https://i.imgur.com/IsFEUw1.png
 STATUS_PANEL_MESSAGE_FILE=./data/link/status-panel.json
 ```
 
