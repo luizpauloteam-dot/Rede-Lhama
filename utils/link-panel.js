@@ -84,7 +84,7 @@ function buildLinkPanelComponents() {
         items: [
           {
             media: {
-              url: "https://i.imgur.com/QVwKl06.jpeg",
+              url: "https://i.imgur.com/h8FnXQm.png",
             },
             description: "Banner de vinculação do servidor",
           },

@@ -196,8 +196,8 @@ const config = {
     coordinationRoles: parseList(process.env.DISCORD_TICKET_COORDINATION_ROLE_IDS),
     administratorRoles: parseList(process.env.DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS),
     viewAllRoles: parseList(process.env.DISCORD_TICKET_VIEW_ALL_ROLE_IDS || "1543506338603204618"),
-    bannerUrl: String(process.env.TICKET_PANEL_BANNER_URL || "https://i.imgur.com/QVwKl06.jpeg").trim(),
-    closedBannerUrl: String(process.env.TICKET_CLOSED_BANNER_URL || "https://i.imgur.com/QVwKl06.jpeg").trim(),
+    bannerUrl: String(process.env.TICKET_PANEL_BANNER_URL || "https://i.imgur.com/kX0lTKL.png").trim(),
+    closedBannerUrl: String(process.env.TICKET_CLOSED_BANNER_URL || "https://i.imgur.com/kX0lTKL.png").trim(),
     accentColor: parseHexColorInt(process.env.TICKET_ACCENT_COLOR, "00D1B2"),
     waitThresholds: {
       lowMax: parseNonNegativeInteger(process.env.TICKET_WAIT_LOW_MAX, 5),
