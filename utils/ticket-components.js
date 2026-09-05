@@ -194,7 +194,6 @@ function buildSupportPanelComponents({ openTicketCount }) {
   containerComponents.push(new ActionRowBuilder().addComponents(select).toJSON());
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components: containerComponents,
   });
 
@@ -266,7 +265,6 @@ function buildStaffChannelComponents(ticket) {
   );
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components,
   });
 
@@ -294,7 +292,6 @@ function buildDmWelcomeComponents(ticket) {
   }
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components,
   });
 
@@ -314,7 +311,6 @@ function buildTicketManageComponents(ticket) {
         .setStyle(ButtonStyle.Secondary);
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components: [
       buildSection(
         [
@@ -416,7 +412,6 @@ function buildTicketClosedComponents(ticket) {
   );
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components: containerComponents,
   });
 
@@ -426,7 +421,6 @@ function buildTicketClosedComponents(ticket) {
 function buildTicketArchivedComponents(ticket) {
   const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components: [
       buildSection(
         [
@@ -514,7 +508,6 @@ function buildTicketReviewComponents({ ticket, rating, userId, userAvatarUrl, co
   }
 
   const container = new ContainerBuilder({
-    accent_color: config.tickets.accentColor,
     components,
   });
 

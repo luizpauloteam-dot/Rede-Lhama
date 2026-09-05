@@ -15,16 +15,6 @@ function normalizeColor(value, fallback = "00FF7F") {
     .trim();
 }
 
-function parseHexColorInt(value, fallback = "FF6600") {
-  const normalizedColor = normalizeColor(value, fallback);
-
-  if (/^[0-9a-fA-F]{6}$/.test(normalizedColor)) {
-    return Number.parseInt(normalizedColor, 16);
-  }
-
-  return Number.parseInt(normalizeColor(fallback), 16);
-}
-
 function parsePositiveInteger(value, fallback, minimum = 1) {
   const parsedValue = Number.parseInt(String(value || ""), 10);
 
@@ -154,7 +144,6 @@ const config = {
     staleAfterMs: parsePositiveInteger(process.env.STATUS_STALE_AFTER_MS, 120000, 30000),
     title: String(process.env.STATUS_PANEL_TITLE || "Em breve").trim(),
     players: String(process.env.STATUS_PLAYERS || "0/0").trim(),
-    accentColor: parseHexColorInt(process.env.STATUS_ACCENT_COLOR),
     images: {
       on: String(process.env.STATUS_IMAGE_ON || defaultStatusImages.on).trim(),
       manutencao: defaultStatusImages.manutencao,
@@ -169,7 +158,6 @@ const config = {
     channelId: String(process.env.DISCORD_SUGGESTION_CHANNEL_ID || "1541872794030178425").trim(),
     approvedChannelId: "1541872816788349038",
     bannerUrl: "https://i.imgur.com/w594Pwm.png",
-    accentColor: parseHexColorInt("", "00D1B2"),
   },
   tickets: {
     enabled: parseBoolean(process.env.TICKETS_ENABLED, true),
@@ -194,7 +182,6 @@ const config = {
     viewAllRoles: parseList(process.env.DISCORD_TICKET_VIEW_ALL_ROLE_IDS || "1543506338603204618"),
     bannerUrl: "https://i.imgur.com/kX0lTKL.png",
     closedBannerUrl: "https://i.imgur.com/kX0lTKL.png",
-    accentColor: parseHexColorInt(process.env.TICKET_ACCENT_COLOR, "00D1B2"),
     waitThresholds: {
       lowMax: parseNonNegativeInteger(process.env.TICKET_WAIT_LOW_MAX, 5),
       moderateMax: parseNonNegativeInteger(process.env.TICKET_WAIT_MODERATE_MAX, 20),

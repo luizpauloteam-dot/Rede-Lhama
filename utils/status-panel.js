@@ -71,7 +71,6 @@ function buildStatusComponents(serverStatus) {
   }
 
   const container = new ContainerBuilder({
-    accent_color: config.status.accentColor,
     components: [
       {
         type: ComponentType.Section,

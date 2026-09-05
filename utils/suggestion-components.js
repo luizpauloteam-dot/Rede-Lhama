@@ -120,7 +120,6 @@ function buildSuggestionPanelComponents() {
   }
 
   const container = new ContainerBuilder({
-    accent_color: config.suggestions.accentColor,
     components,
   });
 
@@ -247,7 +246,6 @@ function buildSuggestionPostComponents({
   ];
 
   const container = new ContainerBuilder({
-    accent_color: config.suggestions.accentColor,
     components,
   });
 
@@ -270,7 +268,6 @@ function buildSuggestionPostComponents({
 
 function buildSuggestionThreadComponents({ suggestionId, implemented = false }) {
   const container = new ContainerBuilder({
-    accent_color: config.suggestions.accentColor,
     components: [
       buildText(
         implemented
@@ -339,7 +336,6 @@ function buildApprovedSuggestionComponents({
   }
 
   const container = new ContainerBuilder({
-    accent_color: config.suggestions.accentColor,
     components,
   });
 
