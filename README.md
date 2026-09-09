@@ -117,50 +117,37 @@ Cada sugestao publicada cria um topico para conversa, mostra botoes de voto na m
 
 ## Sistema de tickets
 
-O bot usa um sistema ModMail com MongoDB/Mongoose e Components v2. O jogador abre o atendimento pelo painel e conversa somente pela DM do bot. A equipe responde dentro de um canal privado criado na categoria interna `1543498767112732692`, no servidor `1541296952514187397`.
+Atendimento por canais privados `ticket-0001`, com MongoDB/Mongoose e Components V2. O servidor é fixo: `1541296952514187397`. O painel abre um formulário com nick e descrição; usuário e equipe conversam no próprio canal.
 
-Configure ao menos:
+O bot cria as categorias DÚVIDAS, REPORTAR-ERROS, DENÚNCIAS, APELAÇÕES, RECUPERAÇÃO, DOAÇÕES, COORDENAÇÃO e OUTROS conforme a demanda, abaixo da âncora `1541597285115371570`. A âncora nunca recebe operações de edição ou exclusão. Somente categorias criadas pelo bot e registradas no MongoDB podem ser removidas; categorias normais, mesmo com nomes iguais, não são adotadas ou excluídas. Categorias cheias recebem instâncias `-2`, `-3`, reutilizando primeiro as que têm espaço. A remoção do último canal dispara uma verificação de canais e tickets ativos antes de excluir a categoria. A inicialização reconcilia exclusões ocorridas com o bot offline.
+
+Configure:
 
 ```env
 MONGODB_URI=mongodb+srv://usuario:senha@cluster/banco
-DISCORD_TICKET_GUILD_ID=1541296952514187397
 DISCORD_TICKET_PANEL_CHANNEL_ID=ID_DO_CANAL_DO_PAINEL
-DISCORD_TICKET_STAFF_CATEGORY_ID=1543498767112732692
 DISCORD_TICKET_SUPPORT_ROLE_IDS=ID_CARGO_STAFF
 DISCORD_TICKET_COORDINATION_ROLE_IDS=ID_CARGO_COORDENACAO
 DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS=ID_CARGO_ADMIN
-DISCORD_TICKET_VIEW_ALL_ROLE_IDS=1543506338603204618
+DISCORD_TICKET_PROTECTED_CATEGORY_IDS=
 DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID=ID_CANAL_TRANSCRIPTS
 DISCORD_TICKET_LOG_CHANNEL_ID=ID_CANAL_LOGS
 DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
 ```
 
-Depois de iniciar o bot, use:
+O bot precisa de Gerenciar canais, Gerenciar cargos (para sobrescritas), Ver canais, Enviar mensagens, Anexar arquivos e Ler histórico. Configure os cargos de atendimento explicitamente. A Coordenação não concede acesso aos cargos de suporte comum. Administrador do Discord sempre ignora restrições de canal. Logs e transcripts de Coordenação ficam no MongoDB/disco, sem publicação nos canais gerais; a equipe autorizada pode baixar o HTML pela ação Transcript.
 
-```txt
-/ticket painel
-/ticket limpar-dm
-/ticket limpar-banco escopo:ticket-atual confirmar:CONFIRMAR
-/ticket limpar-banco escopo:usuario usuario:@usuario confirmar:CONFIRMAR
-/ticket limpar-banco escopo:todos confirmar:CONFIRMAR
-```
+Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar no canal, renomear, fechar com motivo e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento salva o motivo, bloqueia mensagens dos participantes, gera HTML e publica avaliação de 1 a 5 no ticket. Avalie antes da exclusão definitiva do canal.
 
-`/ticket limpar-dm` apaga mensagens recentes enviadas pelo bot na DM de quem executou o comando. O Discord nao permite que o bot apague mensagens enviadas pelo proprio usuario.
-`/ticket limpar-banco` apaga registros persistidos do sistema de tickets no MongoDB. Apenas administradores podem usar, funciona somente no servidor `1541296952514187397`, e o campo `confirmar` precisa ser exatamente `CONFIRMAR`. Essa limpeza nao apaga canais, mensagens ja enviadas no Discord ou arquivos de transcript ja publicados.
-Quem tiver um cargo configurado em `DISCORD_TICKET_VIEW_ALL_ROLE_IDS` pode ver todos os canais internos de ticket e e mencionado quando um ticket novo abre.
+O transcript consulta todo o histórico disponível no Discord, incluindo anexos, imagens, avatares e datas. É salvo em `data/tickets/transcripts` (ou `TICKET_DATA_DIR/transcripts`) antes de qualquer exclusão pelo bot. Mensagens apagadas diretamente no Discord antes da geração não podem ser recuperadas. Mantenha backup desse diretório. `/ticket transcript` também entrega o arquivo ao atendente. O contador usa incremento atômico no MongoDB e não é apagado pela limpeza de registros.
 
-Comandos de staff dentro do canal interno:
+Um ticket ativo por usuário. Execute uma instância do bot por servidor: a fila de operações de categorias evita concorrência entre criação e limpeza dentro do processo. O contador e a restrição de ticket ativo também têm proteção no MongoDB.
 
-```txt
-/ticket info
-/ticket fechar
-/ticket pausar
-/ticket retomar
-/ticket reabrir
-/ticket transcript
-```
+Comandos adicionais: `/ticket info`, `/ticket fechar`, `/ticket pausar`, `/ticket retomar`, `/ticket reabrir`, `/ticket transcript` e comandos de blacklist. `/ticket limpar-banco` exige administrador e `confirmar:CONFIRMAR`; só permite limpar registros após a exclusão dos canais, preservando contador e registro das categorias.
 
-Ao fechar, o transcript e gerado a partir das mensagens salvas no MongoDB, a avaliacao e enviada por DM para quem abriu o atendimento, e o sistema nao cria canais privados acessiveis ao jogador nem categorias automaticas. Tickets ativos do sistema anterior sao preservados e marcados como `legacy_closed` na inicializacao para impedir convivencia entre as duas arquiteturas.
+Registros antigos permanecem no MongoDB sem serem apagados ou convertidos automaticamente. Apenas tickets da versão `private-channels-v1` são atendidos pelo novo fluxo. O bot não retransmite mensagens privadas nem abre canais de fórum ou threads de atendimento.
+
+Validação local: `npm run check` e `npm test`. Confira no servidor a abertura nas oito categorias, visibilidade com contas de usuário/staff/coordenação, fechamento, avaliação, transcript e exclusão do último canal. As referências visuais de conversas anteriores não estão no repositório; o layout conserva o painel e os recursos visuais atuais.
 
 ## Comandos por mensagem
 

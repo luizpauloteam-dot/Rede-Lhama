@@ -168,7 +168,7 @@ function buildSupportPanelComponents({ openTicketCount }) {
     buildText(
       [
         "# Central de Atendimento",
-        "Selecione a categoria correta e mantenha a DM do bot aberta. O atendimento acontece somente pelo privado.",
+        "Selecione a categoria e preencha o formulário para abrir um canal privado com a equipe.",
       ].join("\n"),
     ),
     buildSeparator(),
@@ -191,7 +191,7 @@ function buildSupportPanelComponents({ openTicketCount }) {
     containerComponents.push(buildSeparator(), media);
   }
 
-  containerComponents.push(new ActionRowBuilder().addComponents(select).toJSON());
+  containerComponents.push(buildText("Selecione o tipo de atendimento!"), new ActionRowBuilder().addComponents(select).toJSON());
 
   const container = new ContainerBuilder({
     components: containerComponents,
@@ -208,7 +208,7 @@ function buildStaffActionRow(ticket) {
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`${TICKET_CUSTOM_IDS.claimPrefix}:${ticket.ticketId}`)
-        .setLabel("Assumir")
+        .setLabel("🙋 Assumir")
         .setStyle(ButtonStyle.Success),
     );
   }
@@ -221,7 +221,7 @@ function buildStaffActionRow(ticket) {
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(`${TICKET_CUSTOM_IDS.closePrefix}:${ticket.ticketId}`)
-      .setLabel("Fechar")
+      .setLabel("🔒 Fechar")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled),
   );
@@ -237,8 +237,8 @@ function buildStaffChannelComponents(ticket) {
   const components = [
     buildSection(
       [
-        `# Ticket #${formatTicketNumber(ticket.ticketNumber)}`,
-        `**Jogador:** <@${ticket.userId}>\n**Categoria:** ${categoryName}`,
+        `# 🎟️ Ticket #${formatTicketNumber(ticket.ticketNumber)}`,
+        `**Aberto por:** <@${ticket.ownerId}>\n**Categoria:** ${categoryName}`,
       ],
       buildDisabledBadge(`ticket:badge:${ticket.ticketId}:status`, getStatusLabel(ticket.status)),
     ),
@@ -246,7 +246,7 @@ function buildStaffChannelComponents(ticket) {
       [
         `**Responsavel:** ${assignedStaff}`,
         `**Aberto em:** ${formatDateTime(ticket.createdAt)}`,
-        `**Sistema:** ${ticket.systemVersion || "modmail-v2"}`,
+        `**Nick:** ${escapeDiscordText(ticket.minecraftNick) || "Não informado"}`,
       ].join("\n"),
     ),
   ];
@@ -260,7 +260,7 @@ function buildStaffChannelComponents(ticket) {
 
   components.push(
     buildSeparator(),
-    buildText("Responda neste canal para enviar mensagem ao jogador por DM."),
+    buildText("Converse com a equipe neste canal privado."),
     buildStaffActionRow(ticket),
   );
 
@@ -271,32 +271,7 @@ function buildStaffChannelComponents(ticket) {
   return [container.toJSON()];
 }
 
-function buildDmWelcomeComponents(ticket) {
-  const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
-  const formLines = formDataToDisplayLines(ticket, categoryConfig);
-  const components = [
-    buildText(
-      [
-        `# Ticket #${formatTicketNumber(ticket.ticketNumber)} aberto`,
-        `Categoria: **${categoryConfig.name || ticket.categoryType}**`,
-        "A equipe recebeu sua solicitacao. Envie novas mensagens aqui nesta DM para continuar o atendimento.",
-      ].join("\n"),
-    ),
-  ];
 
-  if (formLines.length) {
-    components.push(
-      buildSeparator(),
-      buildText(["**Resumo enviado**", ...formLines.map((line) => `- ${line}`)].join("\n")),
-    );
-  }
-
-  const container = new ContainerBuilder({
-    components,
-  });
-
-  return [container.toJSON()];
-}
 
 function buildTicketManageComponents(ticket) {
   const disabled = ticket.status === "closed" || ticket.status === "legacy_closed";
@@ -320,16 +295,21 @@ function buildTicketManageComponents(ticket) {
         buildDisabledBadge(`ticket:badge:${ticket.ticketId}:staff`, "Equipe"),
       ),
       buildText("Escolha a acao para este atendimento."),
+      new ActionRowBuilder().addComponents(
+        ...[["add-user", "➕ Adicionar usuário"], ["remove-user", "➖ Remover usuário"], ["rename", "📝 Renomear"]]
+          .map(([action, label]) => new ButtonBuilder().setCustomId(`ticket:${action}:${ticket.ticketId}`)
+            .setLabel(label).setStyle(ButtonStyle.Secondary).setDisabled(disabled)),
+      ).toJSON(),
       new ActionRowBuilder()
         .addComponents(
           new ButtonBuilder()
             .setCustomId(`${TICKET_CUSTOM_IDS.transferPrefix}:${ticket.ticketId}`)
-            .setLabel("Transferir")
+            .setLabel("🔄 Transferir")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(disabled),
           new ButtonBuilder()
             .setCustomId(`${TICKET_CUSTOM_IDS.callUserPrefix}:${ticket.ticketId}`)
-            .setLabel("Chamar jogador")
+            .setLabel("🔔 Chamar usuário")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(disabled),
           new ButtonBuilder()
@@ -475,7 +455,7 @@ function buildReviewSelectRow(ticketId) {
         .setMaxValues(1)
         .addOptions(
           options.map(({ rating, description }) => ({
-            label: `${rating} estrela${rating === 1 ? "" : "s"}`,
+            label: `⭐ ${rating}`,
             value: String(rating),
             description,
           })),
@@ -573,12 +553,18 @@ function buildUserSelectRow(customId, placeholder) {
     .toJSON();
 }
 
+function buildTicketActionModal(ticketId, action, title, label, maxLength) {
+  return new ModalBuilder().setCustomId(`ticket:${action}-modal:${ticketId}`).setTitle(title)
+    .addComponents(buildLabelTextInput({ id: "value", label, maxLength, minLength: 1,
+      required: true, style: action === "close" ? "paragraph" : "short" }));
+}
+
 module.exports = {
+  buildTicketActionModal,
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
   buildCloseConfirmComponents,
   buildDeleteConfirmComponents,
-  buildDmWelcomeComponents,
   buildReviewModal,
   buildStaffChannelComponents,
   buildSupportPanelComponents,

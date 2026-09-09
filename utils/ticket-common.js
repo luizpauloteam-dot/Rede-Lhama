@@ -1,8 +1,5 @@
 const config = require("../config");
 
-const STAFF_CHANNEL_NAME_PREFIX = "📒・";
-const MAX_DISCORD_CHANNEL_NAME_LENGTH = 100;
-
 function escapeDiscordText(value) {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -77,24 +74,14 @@ function normalizeDiscordName(value) {
     .slice(0, 90);
 }
 
-function fitStaffChannelName(categoryName, userName) {
-  const baseName = `${STAFF_CHANNEL_NAME_PREFIX}${categoryName || "ticket"}-`;
-  const maxUserNameLength = Math.max(1, MAX_DISCORD_CHANNEL_NAME_LENGTH - baseName.length);
-  const fittedUserName = String(userName || "usuario").slice(0, maxUserNameLength).replace(/-+$/g, "");
 
-  return `${baseName}${fittedUserName || "usuario"}`;
-}
 
-function buildStaffChannelName(ticket, user = null) {
-  const categoryConfig = getTicketCategoryConfig(ticket.categoryType) || {};
-  const categoryName = normalizeDiscordName(categoryConfig.staffChannelPrefix || categoryConfig.name || ticket.categoryType);
-  const userName = normalizeDiscordName(user?.username || user?.globalName || ticket.userId || "usuario");
-
-  return fitStaffChannelName(categoryName, userName);
+function buildTicketChannelName(ticket) {
+  return `ticket-${formatTicketNumber(ticket.ticketNumber)}`;
 }
 
 module.exports = {
-  buildStaffChannelName,
+  buildTicketChannelName,
   escapeDiscordText,
   escapeHtml,
   formatDateTime,

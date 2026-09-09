@@ -53,7 +53,21 @@ function getVisibleStaffRoleIds(categoryType) {
   ]);
 }
 
+function buildTicketOverwrites(guild, categoryType, ownerId = "") {
+  const flags = PermissionsBitField.Flags;
+  const access = [flags.ViewChannel, flags.SendMessages, flags.AttachFiles, flags.ReadMessageHistory, flags.EmbedLinks];
+  const staffRoles = getVisibleStaffRoleIds(categoryType).filter((id) => id !== guild.id);
+  const overwrites = [
+    { id: guild.id, deny: [flags.ViewChannel] },
+    ...staffRoles.map((id) => ({ id, allow: [...access, flags.ManageMessages] })),
+    { id: guild.members.me.id, allow: [...access, flags.ManageChannels, flags.ManageMessages, flags.ManageRoles] },
+  ];
+  if (ownerId && ownerId !== guild.members.me.id) overwrites.push({ id: ownerId, allow: access });
+  return overwrites;
+}
+
 module.exports = {
+  buildTicketOverwrites,
   getVisibleStaffRoleIds,
   hasAnyConfiguredRole,
   isTicketAdministrator,

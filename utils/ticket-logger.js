@@ -82,6 +82,7 @@ async function logTicketAction(client, payload) {
     metadata,
   });
 
+  if (payload.ticket?.categoryType === "coordination") return;
   await sendDiscordLog(client, payload.guildId || payload.ticket?.guildId, {
     ...payload,
     metadata,

@@ -1,4 +1,6 @@
 const { AttachmentBuilder } = require("discord.js");
+const fs = require("fs").promises;
+const path = require("path");
 
 const config = require("../config");
 const { createLogger } = require("./logger");
@@ -34,7 +36,8 @@ async function fetchTranscriptChannel(client) {
 }
 
 function renderAttachment(attachment) {
-  const url = escapeHtml(attachment.url);
+  const url = escapeHtml(safeMediaUrl(attachment.url));
+  if (!url) return "";
   const name = escapeHtml(attachment.name || "anexo");
   const isImage = String(attachment.contentType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(url);
 
@@ -46,15 +49,14 @@ function renderAttachment(attachment) {
 }
 
 function getDirectionLabel(direction) {
-  if (direction === "user_to_staff") {
-    return "Jogador para staff";
-  }
+  return direction === "channel" ? "Canal do ticket" : "Sistema";
+}
 
-  if (direction === "staff_to_user") {
-    return "Staff para jogador";
-  }
-
-  return "Sistema";
+function safeMediaUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch { return ""; }
 }
 
 function renderMessage(entry) {
@@ -65,7 +67,9 @@ function renderMessage(entry) {
     `<article class="message ${escapeHtml(entry.direction)}">`,
     '<div class="message-body">',
     "<header>",
+    entry.avatarUrl ? `<img width="32" height="32" alt="Avatar" src="${escapeHtml(safeMediaUrl(entry.avatarUrl))}">` : "",
     `<strong>${escapeHtml(entry.authorTag || entry.authorId || "Sistema")}</strong>`,
+    `<span>${escapeHtml(entry.authorId)}</span>`,
     `<span>${escapeHtml(getDirectionLabel(entry.direction))}</span>`,
     `<time>${escapeHtml(formatDateTime(entry.createdAt))}</time>`,
     "</header>",
@@ -105,14 +109,17 @@ function renderTranscriptHtml({ ticket, messages }) {
     `<h1>${escapeHtml(title)}</h1>`,
     '<div class="grid">',
     `<div class="item"><div class="label">Categoria</div>${escapeHtml(categoryConfig.name || ticket.categoryType)}</div>`,
-    `<div class="item"><div class="label">Jogador</div>${escapeHtml(ticket.userId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Jogador</div>${escapeHtml(ticket.ownerId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Nick</div>${escapeHtml(ticket.minecraftNick || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Atendente</div>${escapeHtml(ticket.assignedStaffId || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Status</div>${escapeHtml(ticket.status)}</div>`,
-    `<div class="item"><div class="label">Canal staff</div>${escapeHtml(ticket.staffChannelId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Canal</div>${escapeHtml(ticket.channelId || "Nao informado")}</div>`,
+    `<div class="item"><div class="label">Fechado por</div>${escapeHtml(ticket.closedBy || "Nao informado")}</div>`,
     `<div class="item"><div class="label">Aberto em</div>${escapeHtml(formatDateTime(ticket.createdAt))}</div>`,
     `<div class="item"><div class="label">Fechado em</div>${escapeHtml(ticket.closedAt ? formatDateTime(ticket.closedAt) : "Nao informado")}</div>`,
     `<div class="item"><div class="label">Motivo</div>${escapeHtml(ticket.closeReason || "Nao informado")}</div>`,
     "</div>",
+    `<div class="content">${escapeHtml(JSON.stringify(Object.fromEntries(ticket.formData instanceof Map ? ticket.formData : Object.entries(ticket.formData || {})), null, 2)).replace(/\n/g, "<br>")}</div>`,
     "</section>",
     messages.length ? messages.map(renderMessage).join("") : '<p class="empty">Nenhuma mensagem registrada.</p>',
     "</main>",
@@ -122,13 +129,38 @@ function renderTranscriptHtml({ ticket, messages }) {
 }
 
 async function generateAndSendTranscript(client, ticket) {
-  const transcriptChannel = await fetchTranscriptChannel(client);
-  const messages = await TicketMessage.find({ ticketId: ticket.ticketId }).sort({ createdAt: 1 });
+  const transcriptChannel = ticket.categoryType === "coordination" ? null : await fetchTranscriptChannel(client);
+  const channel = await client.channels.fetch(ticket.channelId);
+  if (!channel?.messages || channel.guildId !== ticket.guildId) throw new Error("Canal do ticket indisponível para transcript.");
+  const messages = [];
+  let before;
+  while (true) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!batch.size) break;
+    for (const message of batch.values()) {
+      messages.push({
+        direction: "channel", authorId: message.author.id, authorTag: message.author.tag,
+        avatarUrl: message.author.displayAvatarURL({ size: 128 }), content: message.content,
+        attachments: [...message.attachments.values()].map((attachment) => ({
+          name: attachment.name, url: attachment.url, contentType: attachment.contentType,
+        })), createdAt: message.createdAt, sourceMessageId: message.id,
+      });
+    }
+    before = [...batch.keys()].reduce((a, b) => BigInt(a) < BigInt(b) ? a : b);
+  }
+  messages.push(...await TicketMessage.find({ ticketId: ticket.ticketId, direction: "system" }).sort({ createdAt: 1 }));
+  messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const html = renderTranscriptHtml({
     ticket,
     messages,
   });
   const filename = `ticket-${formatTicketNumber(ticket.ticketNumber)}.html`;
+  const directory = path.join(config.tickets.dataDir, "transcripts");
+  await fs.mkdir(directory, { recursive: true });
+  const filePath = path.join(directory, `${ticket.ticketId}.html`);
+  await fs.writeFile(filePath, html, "utf8");
+  ticket.transcriptPath = filePath;
+  await ticket.save();
   const attachment = new AttachmentBuilder(Buffer.from(html, "utf8"), {
     name: filename,
   });
@@ -136,6 +168,7 @@ async function generateAndSendTranscript(client, ticket) {
   if (!transcriptChannel) {
     return {
       filename,
+      filePath,
       messageId: "",
     };
   }
@@ -153,10 +186,12 @@ async function generateAndSendTranscript(client, ticket) {
 
   return {
     filename,
+    filePath,
     messageId: message?.id || "",
   };
 }
 
 module.exports = {
   generateAndSendTranscript,
+  renderTranscriptHtml,
 };

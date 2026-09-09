@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const MODMAIL_SYSTEM_VERSION = "modmail-v2";
+const TICKET_SYSTEM_VERSION = "private-channels-v1";
 const ACTIVE_TICKET_STATUSES = ["open", "claimed", "paused"];
 const TICKET_STATUSES = [...ACTIVE_TICKET_STATUSES, "closed", "legacy_closed"];
 
@@ -57,19 +57,19 @@ const TicketSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    userId: {
+    ownerId: {
       type: String,
       default: "",
     },
-    staffCategoryId: {
+    categoryId: {
       type: String,
       default: "",
     },
-    staffChannelId: {
+    channelId: {
       type: String,
       default: "",
     },
-    staffControlMessageId: {
+    controlMessageId: {
       type: String,
       default: "",
     },
@@ -77,6 +77,10 @@ const TicketSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    participantIds: { type: [String], default: [] },
+    transcriptPath: { type: String, default: "" },
+    channelDeletedAt: { type: Date, default: null },
+    finalizedAt: { type: Date, default: null },
     categoryType: {
       type: String,
       required: true,
@@ -101,7 +105,7 @@ const TicketSchema = new mongoose.Schema(
     },
     systemVersion: {
       type: String,
-      default: MODMAIL_SYSTEM_VERSION,
+      default: TICKET_SYSTEM_VERSION,
     },
     lastCallAt: {
       type: Date,
@@ -138,26 +142,28 @@ const TicketSchema = new mongoose.Schema(
   },
 );
 
-TicketSchema.index({ guildId: 1, staffChannelId: 1 }, {
+TicketSchema.index({ guildId: 1, channelId: 1 }, {
   unique: true,
   partialFilterExpression: {
-    staffChannelId: {
+    channelId: {
       $gt: "",
     },
   },
 });
-TicketSchema.index({ guildId: 1, userId: 1, status: 1 });
+TicketSchema.index({ guildId: 1, ownerId: 1, status: 1 });
+TicketSchema.index({ guildId: 1, categoryId: 1, status: 1 });
 TicketSchema.index({ guildId: 1, ticketNumber: 1 }, { unique: true });
 TicketSchema.index({ guildId: 1, status: 1, categoryType: 1 });
 TicketSchema.index(
-  { guildId: 1, userId: 1 },
+  { guildId: 1, ownerId: 1 },
   {
+    name: "private_ticket_owner_active",
     unique: true,
     partialFilterExpression: {
-      userId: {
+      ownerId: {
         $gt: "",
       },
-      systemVersion: MODMAIL_SYSTEM_VERSION,
+      systemVersion: TICKET_SYSTEM_VERSION,
       status: {
         $in: ACTIVE_TICKET_STATUSES,
       },
@@ -177,13 +183,14 @@ const TicketMessageSchema = new mongoose.Schema(
     },
     direction: {
       type: String,
-      enum: ["user_to_staff", "staff_to_user", "system"],
+      enum: ["channel", "system"],
       required: true,
     },
     authorId: {
       type: String,
       default: "",
     },
+    avatarUrl: { type: String, default: "" },
     authorTag: {
       type: String,
       default: "",
@@ -203,18 +210,6 @@ const TicketMessageSchema = new mongoose.Schema(
     sourceChannelId: {
       type: String,
       default: "",
-    },
-    targetMessageId: {
-      type: String,
-      default: "",
-    },
-    targetChannelId: {
-      type: String,
-      default: "",
-    },
-    delivered: {
-      type: Boolean,
-      default: true,
     },
     createdAt: {
       type: Date,
@@ -376,6 +371,16 @@ const TicketCounterSchema = new mongoose.Schema(
   },
 );
 
+const TicketCategorySchema = new mongoose.Schema({
+  guildId: { type: String, required: true },
+  discordCategoryId: { type: String, required: true, unique: true },
+  categoryType: { type: String, required: true },
+  instance: { type: Number, required: true, min: 1 },
+  createdAt: { type: Date, default: Date.now },
+}, { versionKey: false });
+TicketCategorySchema.index({ guildId: 1, categoryType: 1, instance: 1 }, { unique: true });
+const TicketCategory = mongoose.models.TicketCategory || mongoose.model("TicketCategory", TicketCategorySchema);
+
 const Ticket = mongoose.models.Ticket || mongoose.model("Ticket", TicketSchema);
 const TicketMessage = mongoose.models.TicketMessage || mongoose.model("TicketMessage", TicketMessageSchema);
 const TicketLog = mongoose.models.TicketLog || mongoose.model("TicketLog", TicketLogSchema);
@@ -384,30 +389,12 @@ const TicketBlacklist =
   mongoose.models.TicketBlacklist || mongoose.model("TicketBlacklist", TicketBlacklistSchema);
 const TicketCounter = mongoose.models.TicketCounter || mongoose.model("TicketCounter", TicketCounterSchema);
 
-async function dropLegacyTicketIndexes() {
-  const legacyIndexNames = [
-    "guildId_1_channelId_1",
-    "guildId_1_ownerId_1_status_1",
-    "guildId_1_categoryId_1_status_1",
-    "guildId_1_ownerId_1",
-  ];
 
-  for (const indexName of legacyIndexNames) {
-    await Ticket.collection.dropIndex(indexName).catch((error) => {
-      const ignoredCodeNames = ["IndexNotFound", "NamespaceNotFound"];
-      const ignoredCodes = [26, 27];
-
-      if (!ignoredCodeNames.includes(error?.codeName) && !ignoredCodes.includes(error?.code)) {
-        throw error;
-      }
-    });
-  }
-}
 
 async function ensureTicketIndexes() {
-  await dropLegacyTicketIndexes();
   await Promise.all([
     Ticket.init(),
+    TicketCategory.init(),
     TicketMessage.init(),
     TicketLog.init(),
     TicketReview.init(),
@@ -418,11 +405,12 @@ async function ensureTicketIndexes() {
 
 module.exports = {
   ACTIVE_TICKET_STATUSES,
-  MODMAIL_SYSTEM_VERSION,
+  TICKET_SYSTEM_VERSION,
   TICKET_STATUSES,
   Ticket,
   TicketBlacklist,
   TicketCounter,
+  TicketCategory,
   TicketLog,
   TicketMessage,
   TicketReview,

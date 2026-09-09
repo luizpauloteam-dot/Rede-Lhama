@@ -6,7 +6,6 @@ const {
 
 const {
   addBlacklistEntry,
-  clearBotDmMessagesFromCommand,
   clearTicketDatabaseFromCommand,
   closeTicketFromCommand,
   pauseTicketFromCommand,
@@ -61,7 +60,7 @@ async function handlePanelCommand(client, interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ticket")
-    .setDescription("Gerencia o sistema ModMail de tickets da Rede Lhama.")
+    .setDescription("Gerencia o sistema de tickets privados da Rede Lhama.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("painel")
@@ -78,19 +77,6 @@ module.exports = {
       subcommand
         .setName("info")
         .setDescription("Mostra informacoes do ticket no canal atual."),
-    )
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("limpar-dm")
-        .setDescription("Apaga mensagens recentes enviadas pelo bot na sua DM.")
-        .addIntegerOption((option) =>
-          option
-            .setName("quantidade")
-            .setDescription("Quantidade maxima de mensagens do bot para apagar.")
-            .setMinValue(1)
-            .setMaxValue(100)
-            .setRequired(false),
-        ),
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -219,6 +205,7 @@ module.exports = {
 
   async run(client, interaction) {
     const subcommand = interaction.options.getSubcommand();
+    if (interaction.guildId !== require("../../config").tickets.guildId) return replyEphemeral(interaction, "Use o servidor oficial de atendimento.");
 
     if (subcommand === "painel") {
       await handlePanelCommand(client, interaction);
@@ -227,11 +214,6 @@ module.exports = {
 
     if (subcommand === "info") {
       await showTicketInfo(interaction);
-      return;
-    }
-
-    if (subcommand === "limpar-dm") {
-      await clearBotDmMessagesFromCommand(client, interaction, interaction.options.getInteger("quantidade"));
       return;
     }
 

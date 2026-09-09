@@ -11,7 +11,7 @@ const config = require("../config");
 const { createLogger } = require("./logger");
 const {
   ACTIVE_TICKET_STATUSES,
-  MODMAIL_SYSTEM_VERSION,
+  TICKET_SYSTEM_VERSION,
   Ticket,
   TicketBlacklist,
   TicketCounter,
@@ -23,9 +23,7 @@ const {
 const {
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
-  buildCloseConfirmComponents,
   buildDeleteConfirmComponents,
-  buildDmWelcomeComponents,
   buildReviewModal,
   buildStaffChannelComponents,
   buildSupportPanelComponents,
@@ -37,7 +35,7 @@ const {
   getStatusLabel,
 } = require("./ticket-components");
 const {
-  buildStaffChannelName,
+  buildTicketChannelName,
   escapeDiscordText,
   formatTicketNumber,
   getTicketCategoryConfig,
@@ -45,30 +43,39 @@ const {
 const { logTicketAction } = require("./ticket-logger");
 const { generateAndSendTranscript } = require("./ticket-transcript");
 const {
+  buildTicketOverwrites,
   isTicketAdministrator,
   isTicketSupport,
 } = require("./ticket-permissions");
 
+const { withCategoryLock, resolveTicketCategory, cleanupTicketCategory, orderCategories } = require("./ticket-categories");
+const { buildTicketActionModal } = require("./ticket-components");
 const log = createLogger("tickets");
+const busyTickets = new Set();
+
+async function withTicketAction(interaction, ticketId, operation) {
+  if (busyTickets.has(ticketId)) return replyEphemeral(interaction, "Uma ação está em andamento neste ticket. Tente novamente em instantes.");
+  busyTickets.add(ticketId);
+  try { return await operation(); } finally { busyTickets.delete(ticketId); }
+}
+
+function ticketCommand(operation) {
+  return async (client, interaction, ...args) => {
+    const ticket = await findTicketByStaffChannel(interaction.channelId);
+    if (!ticket) return replyEphemeral(interaction, "Este canal não pertence a um ticket.");
+    return withTicketAction(interaction, ticket.ticketId, () => operation(client, interaction, ...args));
+  };
+}
 const SAFE_ALLOWED_MENTIONS = {
   parse: [],
   repliedUser: false,
 };
-const MAX_RELAY_CONTENT_LENGTH = 1850;
-const DEFAULT_DM_CLEAR_LIMIT = 50;
-const MAX_DM_CLEAR_LIMIT = 100;
-const MAX_DM_CLEAR_SCAN_COUNT = 300;
-const DM_CLEAR_FETCH_BATCH_SIZE = 100;
 const DATABASE_CLEAR_CONFIRMATION = "CONFIRMAR";
 const TICKET_DATABASE_COMMAND_GUILD_ID = "1541296952514187397";
 const TICKET_DATABASE_CLEAR_SCOPES = {
   CURRENT_TICKET: "ticket-atual",
   USER: "usuario",
   ALL: "todos",
-};
-const VIEW_ALL_TICKET_CHANNEL_PERMISSIONS = {
-  ViewChannel: true,
-  ReadMessageHistory: true,
 };
 
 async function ensureParentDir(filePath) {
@@ -145,27 +152,6 @@ function getTicketDatabaseCommandGuildId() {
   return TICKET_DATABASE_COMMAND_GUILD_ID;
 }
 
-function normalizeDmClearLimit(limit) {
-  const parsedLimit = Number.parseInt(limit, 10);
-  if (!Number.isInteger(parsedLimit)) {
-    return DEFAULT_DM_CLEAR_LIMIT;
-  }
-
-  return Math.min(MAX_DM_CLEAR_LIMIT, Math.max(1, parsedLimit));
-}
-
-function getOldestFetchedMessageId(messages) {
-  let oldestId = null;
-
-  for (const message of messages.values()) {
-    if (!oldestId || BigInt(message.id) < BigInt(oldestId)) {
-      oldestId = message.id;
-    }
-  }
-
-  return oldestId;
-}
-
 function getDeletedCount(result) {
   return Number(result?.deletedCount || 0);
 }
@@ -188,15 +174,22 @@ async function collectTicketIds(ticketQuery) {
     .filter(Boolean);
 }
 
+async function assertTicketsCanBePurged(query) {
+  if (await Ticket.exists({ ...query, $or: [{ status: { $in: ACTIVE_TICKET_STATUSES } }, { channelDeletedAt: null }] })) {
+    throw new Error("Exclua os canais dos tickets antes de limpar seus registros.");
+  }
+}
+
 async function clearAllTicketDatabaseRecords() {
   const guildId = getTicketDatabaseCommandGuildId();
+  await assertTicketsCanBePurged({ guildId });
   const [tickets, messages, reviews, logs, blacklist, counters] = await Promise.all([
     Ticket.deleteMany({ guildId }),
     TicketMessage.deleteMany({ guildId }),
     TicketReview.deleteMany({ guildId }),
     TicketLog.deleteMany({ guildId }),
     TicketBlacklist.deleteMany({ guildId }),
-    TicketCounter.deleteOne({ guildId }),
+    Promise.resolve({ deletedCount: 0 }),
   ]);
 
   return {
@@ -212,6 +205,7 @@ async function clearAllTicketDatabaseRecords() {
 async function clearScopedTicketDatabaseRecords(ticketQuery, options = {}) {
   const guildId = getTicketDatabaseCommandGuildId();
   const userId = options.userId || "";
+  await assertTicketsCanBePurged(ticketQuery);
   const ticketIds = await collectTicketIds(ticketQuery);
   const ticketIdFilter = ticketIds.length
     ? {
@@ -273,7 +267,7 @@ async function clearScopedTicketDatabaseRecords(ticketQuery, options = {}) {
 function buildTicketScopeQuery(extraQuery = {}) {
   return {
     guildId: getTicketGuildId(),
-    systemVersion: MODMAIL_SYSTEM_VERSION,
+    systemVersion: TICKET_SYSTEM_VERSION,
     ...extraQuery,
   };
 }
@@ -291,7 +285,7 @@ async function getOpenTicketCount() {
 async function findActiveTicketByUser(userId) {
   return Ticket.findOne(
     buildTicketScopeQuery({
-      userId,
+      ownerId: userId,
       status: {
         $in: ACTIVE_TICKET_STATUSES,
       },
@@ -302,7 +296,7 @@ async function findActiveTicketByUser(userId) {
 async function findTicketByStaffChannel(channelId) {
   return Ticket.findOne(
     buildTicketScopeQuery({
-      staffChannelId: channelId,
+      channelId: channelId,
     }),
   ).sort({ createdAt: -1 });
 }
@@ -398,42 +392,14 @@ async function resolveStaffGuild(client) {
   return guild;
 }
 
-async function resolveStaffCategory(client) {
-  if (!config.tickets.staffCategoryId) {
-    const error = new Error("DISCORD_TICKET_STAFF_CATEGORY_ID nao configurado.");
-    error.code = "TICKET_CATEGORY_NOT_CONFIGURED";
-    throw error;
-  }
-
-  const guild = await resolveStaffGuild(client);
-  const category =
-    guild.channels.cache.get(config.tickets.staffCategoryId) ||
-    (await guild.channels.fetch(config.tickets.staffCategoryId).catch(() => null));
-
-  if (category?.type !== ChannelType.GuildCategory || category.guildId !== guild.id) {
-    const error = new Error(`Categoria de atendimento invalida: ${config.tickets.staffCategoryId}`);
-    error.code = "TICKET_CATEGORY_INVALID";
-    throw error;
-  }
-
-  const everyonePermissions = category.permissionsFor(guild.roles.everyone);
-  if (everyonePermissions?.has(PermissionsBitField.Flags.ViewChannel)) {
-    const error = new Error(`Categoria de atendimento precisa ser privada: ${config.tickets.staffCategoryId}`);
-    error.code = "TICKET_CATEGORY_PUBLIC";
-    throw error;
-  }
-
-  return category;
-}
-
 async function fetchStaffChannel(client, ticket) {
-  if (!ticket?.staffChannelId) {
+  if (!ticket?.channelId) {
     return null;
   }
 
   const channel =
-    client.channels.cache.get(ticket.staffChannelId) ||
-    (await client.channels.fetch(ticket.staffChannelId).catch(() => null));
+    client.channels.cache.get(ticket.channelId) ||
+    (await client.channels.fetch(ticket.channelId).catch(() => null));
 
   if (!isSendableTextChannel(channel) || channel.guildId !== ticket.guildId) {
     return null;
@@ -452,8 +418,8 @@ async function refreshStaffChannelPanel(client, ticket) {
     ? buildTicketArchivedComponents(ticket)
     : buildStaffChannelComponents(ticket);
 
-  if (ticket.staffControlMessageId) {
-    const message = await channel.messages.fetch(ticket.staffControlMessageId).catch(() => null);
+  if (ticket.controlMessageId) {
+    const message = await channel.messages.fetch(ticket.controlMessageId).catch(() => null);
     if (message) {
       await message
         .edit({
@@ -481,7 +447,7 @@ async function refreshStaffChannelPanel(client, ticket) {
     });
 
   if (message) {
-    ticket.staffControlMessageId = message.id;
+    ticket.controlMessageId = message.id;
     await ticket.save();
   }
 
@@ -490,6 +456,7 @@ async function refreshStaffChannelPanel(client, ticket) {
 
 async function fetchPanelChannel(client, preferredChannel = null) {
   if (isSendableTextChannel(preferredChannel)) {
+    if (preferredChannel.guildId !== getTicketGuildId()) throw new Error("Publique o painel no servidor oficial de atendimento.");
     return preferredChannel;
   }
 
@@ -502,7 +469,7 @@ async function fetchPanelChannel(client, preferredChannel = null) {
     client.channels.cache.get(channelId) ||
     (await client.channels.fetch(channelId).catch(() => null));
 
-  if (!isSendableTextChannel(channel)) {
+  if (!isSendableTextChannel(channel) || channel.guildId !== getTicketGuildId()) {
     log.warn(`Canal de painel de tickets invalido ou inacessivel: ${channelId}`);
     return null;
   }
@@ -596,12 +563,12 @@ async function resetSupportPanelSelect(interaction) {
 async function sendExistingTicketReply(interaction, ticket) {
   await replyEphemeral(
     interaction,
-    `Voce ja possui o ticket #${formatTicketNumber(ticket.ticketNumber)} em aberto. Continue o atendimento pela DM do bot.`,
+    `Voce ja possui o ticket #${formatTicketNumber(ticket.ticketNumber)} em aberto. Continue em <#${ticket.channelId}>.`,
   );
 }
 
 async function validateBeforeOpening(interaction) {
-  if (!interaction.guild) {
+  if (interaction.guildId !== getTicketGuildId()) {
     await replyEphemeral(interaction, "Use este painel dentro do servidor do Discord.");
     return false;
   }
@@ -651,7 +618,7 @@ async function handlePanelSelect(interaction) {
 async function reserveTicket(interaction, categoryType, formData) {
   const activeTickets = await Ticket.countDocuments(
     buildTicketScopeQuery({
-      userId: interaction.user.id,
+      ownerId: interaction.user.id,
       status: {
         $in: ACTIVE_TICKET_STATUSES,
       },
@@ -670,113 +637,36 @@ async function reserveTicket(interaction, categoryType, formData) {
   return Ticket.create({
     guildId: getTicketGuildId(),
     originGuildId: interaction.guildId || "",
-    userId: interaction.user.id,
+    ownerId: interaction.user.id,
     categoryType,
     ticketNumber,
     minecraftNick: formData.minecraftNick || "",
     formData,
     status: "open",
-    systemVersion: MODMAIL_SYSTEM_VERSION,
+    systemVersion: TICKET_SYSTEM_VERSION,
   });
 }
 
 async function createStaffChannel(client, category, ticket, user) {
   const channel = await category.guild.channels.create({
-    name: buildStaffChannelName(ticket, user),
-    type: ChannelType.GuildText,
-    parent: category.id,
-    topic: `Ticket ${ticket.ticketId} | Usuario ${ticket.userId} | Categoria ${ticket.categoryType}`,
-    reason: `Ticket #${formatTicketNumber(ticket.ticketNumber)} aberto por ${user.tag || user.id}.`,
+    name: buildTicketChannelName(ticket), type: ChannelType.GuildText, parent: category.id,
+    permissionOverwrites: buildTicketOverwrites(category.guild, ticket.categoryType, ticket.ownerId),
+    topic: `Ticket ${ticket.ticketId} | Usuário ${ticket.ownerId} | Categoria ${ticket.categoryType}`,
+    reason: `Ticket #${formatTicketNumber(ticket.ticketNumber)} aberto por ${user.id}`,
   });
-
-  const viewAllRoleIds = await applyViewAllTicketRolePermissions(channel);
-  await sendTicketRoleMention(channel, viewAllRoleIds);
-
-  const controlMessage = await channel.send({
-    flags: MessageFlags.IsComponentsV2,
-    components: buildStaffChannelComponents(ticket),
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
-  });
-
-  ticket.staffCategoryId = category.id;
-  ticket.staffChannelId = channel.id;
-  ticket.staffControlMessageId = controlMessage.id;
-  await ticket.save();
+  ticket.categoryId = category.id;
+  ticket.channelId = channel.id;
+  try {
+    await ticket.save();
+    const message = await channel.send({ flags: MessageFlags.IsComponentsV2,
+      components: buildStaffChannelComponents(ticket), allowedMentions: SAFE_ALLOWED_MENTIONS });
+    ticket.controlMessageId = message.id;
+    await ticket.save();
+  } catch (error) {
+    await channel.delete("Falha ao registrar o ticket").catch((failure) => log.error("Falha no rollback do canal", failure));
+    throw error;
+  }
   return channel;
-}
-
-async function applyViewAllTicketRolePermissions(channel) {
-  const roleIds = [...new Set(config.tickets.viewAllRoles || [])];
-  if (!roleIds.length) {
-    return [];
-  }
-
-  const allowedRoleIds = [];
-
-  for (const roleId of roleIds) {
-    const role = channel.guild.roles.cache.get(roleId) || (await channel.guild.roles.fetch(roleId).catch(() => null));
-    if (!role) {
-      log.warn(`Cargo ${roleId} configurado para ver todos os tickets nao foi encontrado.`);
-      continue;
-    }
-
-    const currentOverwrite = channel.permissionOverwrites.cache.get(roleId);
-    if (
-      currentOverwrite?.allow.has(PermissionsBitField.Flags.ViewChannel) &&
-      currentOverwrite.allow.has(PermissionsBitField.Flags.ReadMessageHistory)
-    ) {
-      allowedRoleIds.push(roleId);
-      continue;
-    }
-
-    const updatedOverwrite = await channel.permissionOverwrites
-      .edit(role, VIEW_ALL_TICKET_CHANNEL_PERMISSIONS, {
-        reason: "Cargo com acesso de visualizacao a todos os tickets.",
-      })
-      .catch((error) => {
-        log.warn(`Nao foi possivel liberar visualizacao do ticket para o cargo ${roleId}.`, error);
-      });
-
-    if (updatedOverwrite) {
-      allowedRoleIds.push(roleId);
-    }
-  }
-
-  return allowedRoleIds;
-}
-
-async function sendTicketRoleMention(channel, roleIds) {
-  const mentionRoleIds = [...new Set(roleIds || [])];
-  if (!mentionRoleIds.length) {
-    return null;
-  }
-
-  return channel
-    .send({
-      content: `${mentionRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")}\nNovo ticket aberto.`,
-      allowedMentions: {
-        parse: [],
-        roles: mentionRoleIds,
-        repliedUser: false,
-      },
-    })
-    .catch((error) => {
-      log.warn("Nao foi possivel mencionar o cargo no canal do ticket.", error);
-      return null;
-    });
-}
-
-async function sendTicketOpenedDm(user, ticket) {
-  return user
-    .send({
-      flags: MessageFlags.IsComponentsV2,
-      components: buildDmWelcomeComponents(ticket),
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    })
-    .catch((error) => {
-      log.warn(`Nao foi possivel enviar DM de abertura do ticket ${ticket.ticketId}.`, error);
-      return null;
-    });
 }
 
 async function recordTicketMessage(ticket, payload) {
@@ -790,9 +680,6 @@ async function recordTicketMessage(ticket, payload) {
     attachments: payload.attachments || [],
     sourceMessageId: payload.sourceMessageId || "",
     sourceChannelId: payload.sourceChannelId || "",
-    targetMessageId: payload.targetMessageId || "",
-    targetChannelId: payload.targetChannelId || "",
-    delivered: payload.delivered !== false,
     createdAt: payload.createdAt || new Date(),
   }).catch((error) => {
     if (!isDuplicateKeyError(error)) {
@@ -812,32 +699,6 @@ async function recordSystemMessage(ticket, content, authorId = "") {
   });
 }
 
-async function closeTicketAfterDmFailure(client, ticket, channel) {
-  ticket.status = "closed";
-  ticket.closedAt = new Date();
-  ticket.closedBy = client.user?.id || "";
-  ticket.closeReason = "DM do usuario indisponivel na abertura do ticket.";
-  await ticket.save();
-
-  await recordSystemMessage(ticket, ticket.closeReason, client.user?.id || "");
-  await channel
-    ?.send({
-      content: "Nao consegui enviar DM para o jogador. O ticket foi fechado para evitar atendimento inconsistente.",
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    })
-    .catch(() => null);
-  await refreshStaffChannelPanel(client, ticket);
-  await channel?.delete("Rollback de ticket ModMail sem DM disponivel.").catch(() => null);
-  await logTicketAction(client, {
-    ticket,
-    action: "TICKET_CLOSE",
-    executorId: client.user?.id || "",
-    metadata: {
-      reason: ticket.closeReason,
-    },
-  });
-}
-
 async function createTicketFromModal(interaction, categoryType) {
   const categoryConfig = getTicketCategoryConfig(categoryType);
   if (!categoryConfig) {
@@ -846,6 +707,7 @@ async function createTicketFromModal(interaction, categoryType) {
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (interaction.guildId !== getTicketGuildId()) return true;
 
   let ticket = null;
   let staffChannel = null;
@@ -862,10 +724,13 @@ async function createTicketFromModal(interaction, categoryType) {
       return true;
     }
 
-    const staffCategory = await resolveStaffCategory(interaction.client);
     const formData = extractFormData(interaction, categoryConfig);
     ticket = await reserveTicket(interaction, categoryType, formData);
-    staffChannel = await createStaffChannel(interaction.client, staffCategory, ticket, interaction.user);
+    staffChannel = await withCategoryLock(async () => {
+      const guild = await resolveStaffGuild(interaction.client);
+      const category = await resolveTicketCategory(guild, categoryType);
+      return createStaffChannel(interaction.client, category, ticket, interaction.user);
+    });
 
     await recordSystemMessage(
       ticket,
@@ -873,29 +738,18 @@ async function createTicketFromModal(interaction, categoryType) {
       interaction.user.id,
     );
 
-    const dmMessage = await sendTicketOpenedDm(interaction.user, ticket);
-    if (!dmMessage) {
-      await closeTicketAfterDmFailure(interaction.client, ticket, staffChannel);
-      await replyEphemeral(
-        interaction,
-        "Nao consegui abrir DM com voce. Ative mensagens privadas do servidor e tente novamente.",
-      );
-      await refreshSupportPanel(interaction.client);
-      return true;
-    }
-
     await logTicketAction(interaction.client, {
       ticket,
       action: "TICKET_CREATE",
       executorId: interaction.user.id,
       metadata: {
-        staffCategoryId: ticket.staffCategoryId,
-        staffChannelId: ticket.staffChannelId,
+        categoryId: ticket.categoryId,
+        channelId: ticket.channelId,
         categoryType,
       },
     });
 
-    await replyEphemeral(interaction, "Seu atendimento foi aberto. Continue pela DM do bot.");
+    await replyEphemeral(interaction, `Seu atendimento foi aberto em <#${ticket.channelId}>.`);
     await refreshSupportPanel(interaction.client);
     return true;
   } catch (error) {
@@ -907,15 +761,25 @@ async function createTicketFromModal(interaction, categoryType) {
       }
     }
 
-    if (staffChannel && ticket) {
+    if (ticket?.channelId) {
       ticket.status = "closed";
       ticket.closedAt = new Date();
       ticket.closedBy = interaction.client.user?.id || "";
       ticket.closeReason = "Falha ao concluir abertura do ticket.";
-      await ticket.save().catch(() => null);
-      await staffChannel.delete("Rollback de ticket ModMail apos falha na abertura.").catch(() => null);
+      await ticket.save().catch((failure) => log.error("Falha ao registrar rollback do ticket.", failure));
+      const channel = staffChannel || await fetchStaffChannel(interaction.client, ticket);
+      if (channel) {
+        await channel.delete("Rollback de ticket apos falha na abertura.")
+          .catch((failure) => log.error("Canal preservado após falha no rollback; registro mantido para recuperação.", failure));
+      }
     } else if (ticket) {
-      await Ticket.deleteOne({ _id: ticket._id }).catch(() => null);
+      await Ticket.deleteOne({ _id: ticket._id }).catch((failure) => log.error("Falha ao liberar reserva do ticket.", failure));
+    }
+    if (ticket?.categoryId) {
+      await withCategoryLock(async () => {
+        const guild = await resolveStaffGuild(interaction.client);
+        await cleanupTicketCategory(guild, ticket.categoryId);
+      }).catch((failure) => log.error("Falha ao limpar categoria após abertura interrompida.", failure));
     }
 
     if (
@@ -947,7 +811,7 @@ async function handleCategoryModalSubmit(interaction) {
   return true;
 }
 
-async function requireTicketForInteraction(interaction, ticketId, options = {}) {
+async function requireTicketForInteraction(interaction, ticketId) {
   const ticket = await Ticket.findOne(
     buildTicketScopeQuery({
       ticketId,
@@ -956,8 +820,7 @@ async function requireTicketForInteraction(interaction, ticketId, options = {}) 
 
   if (
     !ticket ||
-    (!options.allowDm && ticket.guildId !== interaction.guildId) ||
-    (options.allowDm && interaction.guildId && ticket.guildId !== interaction.guildId)
+    ticket.guildId !== interaction.guildId
   ) {
     await replyEphemeral(interaction, "Ticket nao encontrado.");
     return null;
@@ -967,12 +830,8 @@ async function requireTicketForInteraction(interaction, ticketId, options = {}) 
 }
 
 async function fetchInteractionMember(interaction, ticket) {
-  if (interaction.member?.roles?.cache) {
-    return interaction.member;
-  }
-
-  const guild = interaction.guild || (await interaction.client.guilds.fetch(ticket.guildId).catch(() => null));
-  return guild?.members.fetch(interaction.user.id).catch(() => null);
+  const guild = interaction.guild || await interaction.client.guilds.fetch(ticket.guildId);
+  return guild.members.fetch({ user: interaction.user.id, force: true });
 }
 
 async function requireStaff(interaction, ticket) {
@@ -982,7 +841,8 @@ async function requireStaff(interaction, ticket) {
   }
 
   const member = await fetchInteractionMember(interaction, ticket);
-  if (isTicketSupport(member, ticket.categoryType)) {
+  const channel = await fetchStaffChannel(interaction.client, ticket);
+  if (isTicketSupport(member, ticket.categoryType) && channel?.permissionsFor(member)?.has(PermissionsBitField.Flags.ViewChannel)) {
     return true;
   }
 
@@ -998,7 +858,7 @@ async function findTicketForCurrentChannel(interaction) {
 
   const ticket = await findTicketByStaffChannel(interaction.channelId);
   if (!ticket) {
-    await replyEphemeral(interaction, "Este canal nao pertence a um ticket ModMail.");
+    await replyEphemeral(interaction, "Este canal nao pertence a um ticket.");
     return null;
   }
 
@@ -1115,6 +975,9 @@ async function handleTransferSelect(interaction, ticketId) {
     return true;
   }
 
+  if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) return replyEphemeral(interaction, "Este ticket está fechado.");
+  const targetChannel = await fetchStaffChannel(interaction.client, ticket);
+  if (!targetChannel?.permissionsFor(targetMember)?.has(PermissionsBitField.Flags.ViewChannel)) return replyEphemeral(interaction, "O atendente não tem acesso ao canal.");
   const oldStaffId = ticket.assignedStaffId || "";
   ticket.assignedStaffId = targetId;
   ticket.status = "claimed";
@@ -1168,24 +1031,20 @@ async function handleCallUser(interaction, ticketId) {
     return true;
   }
 
-  const user = await interaction.client.users.fetch(ticket.userId).catch(() => null);
-  const dm = await user
-    ?.send({
-      content: "A equipe respondeu ao seu ticket e esta aguardando seu retorno.",
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    })
-    .catch(() => null);
+  const channel = await fetchStaffChannel(interaction.client, ticket);
+  const notification = await channel.send({ content: `<@${ticket.ownerId}>, a equipe aguarda seu retorno.`,
+    allowedMentions: { parse: [], users: [ticket.ownerId] } });
 
   await logTicketAction(interaction.client, {
     ticket: updatedTicket,
     action: "TICKET_CALL_USER",
     executorId: interaction.user.id,
-    targetId: ticket.userId,
+    targetId: ticket.ownerId,
     metadata: {
-      delivered: Boolean(dm),
+      delivered: Boolean(notification),
     },
   });
-  await replyEphemeral(interaction, dm ? "Jogador chamado na DM." : "Nao consegui enviar DM para o jogador.");
+  await replyEphemeral(interaction, "Jogador chamado no canal do ticket.");
   return true;
 }
 
@@ -1248,32 +1107,15 @@ async function resumeTicket(interaction, ticketId) {
 
 async function showCloseConfirmation(interaction, ticketId) {
   const ticket = await requireTicketForInteraction(interaction, ticketId);
-  if (!ticket || !(await requireStaff(interaction, ticket))) {
-    return true;
-  }
-
-  await replyEphemeral(interaction, "Deseja realmente fechar este atendimento?", {
-    components: buildCloseConfirmComponents(ticketId),
-  });
+  if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+  await interaction.showModal(buildTicketActionModal(ticketId, "close", "Fechar ticket", "Motivo do fechamento", 700));
   return true;
 }
 
-async function sendClosedTicketDm(client, ticket) {
-  const user = await client.users.fetch(ticket.userId).catch(() => null);
-  if (!user) {
-    return null;
-  }
-
-  return user
-    .send({
-      flags: MessageFlags.IsComponentsV2,
-      components: buildTicketClosedComponents(ticket),
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    })
-    .catch((error) => {
-      log.warn(`Nao foi possivel enviar DM de finalizacao do ticket ${ticket.ticketId}.`, error);
-      return null;
-    });
+async function sendTicketReview(client, ticket) {
+  const channel = await fetchStaffChannel(client, ticket);
+  return channel.send({ flags: MessageFlags.IsComponentsV2,
+    components: buildTicketClosedComponents(ticket), allowedMentions: SAFE_ALLOWED_MENTIONS });
 }
 
 async function closeTicket(interaction, ticketId, reason) {
@@ -1286,7 +1128,7 @@ async function closeTicket(interaction, ticketId, reason) {
     return true;
   }
 
-  const updatedTicket = await Ticket.findOneAndUpdate(
+  let updatedTicket = await Ticket.findOneAndUpdate(
     buildTicketScopeQuery({
       ticketId,
       status: {
@@ -1305,8 +1147,11 @@ async function closeTicket(interaction, ticketId, reason) {
   );
 
   if (!updatedTicket) {
-    await replyEphemeral(interaction, "Este ticket ja esta finalizado.");
-    return true;
+    if (ticket.status !== "closed" || ticket.finalizedAt) {
+      await replyEphemeral(interaction, "Este ticket já está finalizado.");
+      return true;
+    }
+    updatedTicket = ticket; // Retry an interrupted finalization without losing its reason/date.
   }
 
   await recordSystemMessage(
@@ -1315,6 +1160,10 @@ async function closeTicket(interaction, ticketId, reason) {
     interaction.user.id,
   );
 
+  const channel = await fetchStaffChannel(interaction.client, updatedTicket);
+  for (const userId of [updatedTicket.ownerId, ...(updatedTicket.participantIds || [])]) {
+    await channel.permissionOverwrites.edit(userId, { SendMessages: false, AttachFiles: false });
+  }
   const transcript = await generateAndSendTranscript(interaction.client, updatedTicket);
   await logTicketAction(interaction.client, {
     ticket: updatedTicket,
@@ -1323,7 +1172,7 @@ async function closeTicket(interaction, ticketId, reason) {
     metadata: transcript,
   });
 
-  const finalMessage = await sendClosedTicketDm(interaction.client, updatedTicket);
+  const finalMessage = await sendTicketReview(interaction.client, updatedTicket);
   updatedTicket.finalMessageId = finalMessage?.id || "";
   await updatedTicket.save();
 
@@ -1335,29 +1184,23 @@ async function closeTicket(interaction, ticketId, reason) {
     executorId: interaction.user.id,
     metadata: {
       reason: updatedTicket.closeReason,
-      finalMessageSentInDm: Boolean(finalMessage),
+      reviewMessageSent: Boolean(finalMessage),
     },
   });
+  updatedTicket.finalizedAt = new Date();
+  await updatedTicket.save();
   await replyEphemeral(
     interaction,
     finalMessage
-      ? "Ticket finalizado, transcript gerado e avaliacao enviada na DM."
-      : "Ticket finalizado e transcript gerado, mas nao consegui enviar a DM de avaliacao.",
+      ? "Ticket finalizado, transcript salvo e avaliação enviada no canal."
+      : "Ticket finalizado e transcript salvo; avaliação indisponível.",
   );
   await refreshSupportPanel(interaction.client);
   return true;
 }
 
 async function confirmCloseTicket(interaction, ticketId) {
-  await interaction
-    .update({
-      content: "Fechando ticket...",
-      components: [],
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    })
-    .catch(() => null);
-
-  return closeTicket(interaction, ticketId, "Resolvido");
+  return showCloseConfirmation(interaction, ticketId);
 }
 
 async function cancelCloseTicket(interaction) {
@@ -1385,7 +1228,7 @@ async function reopenTicket(client, interaction, ticket) {
     return;
   }
 
-  const activeTicket = await findActiveTicketByUser(ticket.userId);
+  const activeTicket = await findActiveTicketByUser(ticket.ownerId);
   if (activeTicket && activeTicket.ticketId !== ticket.ticketId) {
     await replyEphemeral(
       interaction,
@@ -1407,6 +1250,7 @@ async function reopenTicket(client, interaction, ticket) {
           closedAt: null,
           closedBy: "",
           closeReason: "",
+          finalizedAt: null,
           pausedAt: null,
           pausedBy: "",
         },
@@ -1427,17 +1271,12 @@ async function reopenTicket(client, interaction, ticket) {
     return;
   }
 
+  const channel = await fetchStaffChannel(client, updatedTicket);
+  for (const userId of [updatedTicket.ownerId, ...(updatedTicket.participantIds || [])]) {
+    await channel.permissionOverwrites.edit(userId, { SendMessages: true, AttachFiles: true });
+  }
   await refreshStaffChannelPanel(client, updatedTicket);
   await recordSystemMessage(updatedTicket, `Ticket reaberto por ${interaction.user.id}.`, interaction.user.id);
-  await interaction.client.users
-    .fetch(updatedTicket.userId)
-    .then((user) =>
-      user.send({
-        content: `Seu ticket #${formatTicketNumber(updatedTicket.ticketNumber)} foi reaberto pela equipe.`,
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      }),
-    )
-    .catch(() => null);
 
   await logTicketAction(client, {
     ticket: updatedTicket,
@@ -1466,7 +1305,8 @@ async function handleTranscript(interaction, ticketId) {
     interaction,
     transcript.messageId
       ? "Transcript enviado no canal configurado."
-      : "Transcript gerado, mas nao ha canal de transcript configurado ou acessivel.",
+      : "Transcript salvo localmente e anexado abaixo.",
+    { files: [transcript.filePath] },
   );
   return true;
 }
@@ -1478,12 +1318,12 @@ async function handleReviewRating(interaction, ticketId, rating) {
     return true;
   }
 
-  const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
+  const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket) {
     return true;
   }
 
-  if (interaction.user.id !== ticket.userId) {
+  if (interaction.user.id !== ticket.ownerId || ticket.status !== "closed") {
     await replyEphemeral(interaction, "Somente quem abriu o ticket pode avaliar este atendimento.");
     return true;
   }
@@ -1508,12 +1348,12 @@ async function handleReviewModal(interaction, ticketId, rating) {
     return true;
   }
 
-  const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
+  const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket) {
     return true;
   }
 
-  if (interaction.user.id !== ticket.userId) {
+  if (interaction.user.id !== ticket.ownerId || ticket.status !== "closed") {
     await replyEphemeral(interaction, "Somente quem abriu o ticket pode avaliar este atendimento.");
     return true;
   }
@@ -1549,7 +1389,7 @@ async function handleReviewModal(interaction, ticketId, rating) {
     },
   });
 
-  if (config.tickets.reviewChannelId) {
+  if (config.tickets.reviewChannelId && ticket.categoryType !== "coordination") {
     const reviewChannel =
       interaction.client.channels.cache.get(config.tickets.reviewChannelId) ||
       (await interaction.client.channels.fetch(config.tickets.reviewChannelId).catch(() => null));
@@ -1581,6 +1421,18 @@ async function handleTicketButton(interaction) {
   }
 
   const [, action, ticketId] = interaction.customId.split(":");
+
+  if (action === "add-user" || action === "remove-user") {
+    return sendUserSelect(interaction, ticketId, `ticket:${action}-select`, "Selecione o usuário");
+  }
+  if (action === "rename") {
+    const ticket = await requireTicketForInteraction(interaction, ticketId);
+    if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+    await interaction.showModal(buildTicketActionModal(ticketId, "rename", "Renomear ticket", "Nome do canal", 90));
+    return true;
+  }
+  if (action === "delete" || action === "delete-confirm") return deleteTicketChannel(interaction, ticketId, action === "delete-confirm");
+  if (action === "delete-cancel") return replyEphemeral(interaction, "Exclusão cancelada.", { components: [] });
 
   if (action === "claim") return handleClaim(interaction, ticketId);
   if (action === "manage") return handleManage(interaction, ticketId);
@@ -1628,6 +1480,7 @@ async function handleTicketUserSelect(interaction) {
   const [, action, ticketId] = interaction.customId.split(":");
 
   if (action === "transfer-select") return handleTransferSelect(interaction, ticketId);
+  if (action === "add-user-select" || action === "remove-user-select") return changeTicketParticipant(interaction, ticketId, action === "add-user-select");
 
   return false;
 }
@@ -1644,6 +1497,23 @@ async function handleTicketModalSubmit(interaction) {
   const [, action, ticketId, rating] = interaction.customId.split(":");
 
   if (action === "review-modal") return handleReviewModal(interaction, ticketId, rating);
+  if (action === "close-modal") {
+    const reason = String(interaction.fields.getTextInputValue("value") || "").trim();
+    if (!reason || reason.length > 700) return replyEphemeral(interaction, "Informe um motivo de até 700 caracteres.");
+    return closeTicket(interaction, ticketId, reason);
+  }
+  if (action === "rename-modal") {
+    const ticket = await requireTicketForInteraction(interaction, ticketId);
+    if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+    if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) return replyEphemeral(interaction, "Este ticket está fechado.");
+    const name = require("./ticket-common").normalizeDiscordName(interaction.fields.getTextInputValue("value"));
+    if (!name) return replyEphemeral(interaction, "Informe um nome válido.");
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const channel = await fetchStaffChannel(interaction.client, ticket);
+    await channel.setName(name, `Ticket renomeado por ${interaction.user.id}`);
+    await logTicketAction(interaction.client, { ticket, action: "TICKET_RENAME", executorId: interaction.user.id, metadata: { name } });
+    return replyEphemeral(interaction, `Canal renomeado para ${name}.`);
+  }
 
   return false;
 }
@@ -1654,10 +1524,16 @@ async function handleTicketInteraction(interaction) {
   }
 
   try {
-    if (interaction.isStringSelectMenu()) return handleTicketStringSelect(interaction);
-    if (interaction.isButton()) return handleTicketButton(interaction);
-    if (interaction.isUserSelectMenu()) return handleTicketUserSelect(interaction);
-    if (interaction.isModalSubmit()) return handleTicketModalSubmit(interaction);
+    const dispatch = async () => {
+      if (interaction.isStringSelectMenu()) return handleTicketStringSelect(interaction);
+      if (interaction.isButton()) return handleTicketButton(interaction);
+      if (interaction.isUserSelectMenu()) return handleTicketUserSelect(interaction);
+      if (interaction.isModalSubmit()) return handleTicketModalSubmit(interaction);
+      return false;
+    };
+    const [, action, ticketId] = interaction.customId.split(":");
+    if (ticketId && action !== "category-modal") return await withTicketAction(interaction, ticketId, dispatch);
+    return await dispatch();
   } catch (error) {
     log.error("Falha ao processar interacao de ticket.", error);
     await replyEphemeral(interaction, "Nao foi possivel processar essa acao agora.");
@@ -1667,435 +1543,96 @@ async function handleTicketInteraction(interaction) {
   return false;
 }
 
-function extractMessageAttachments(message) {
-  return [...message.attachments.values()].map((attachment) => ({
-    id: attachment.id || "",
-    name: attachment.name || "anexo",
-    url: attachment.url || "",
-    contentType: attachment.contentType || "",
-    size: Number(attachment.size || 0),
-  }));
-}
-
-function formatAttachmentLinks(attachments) {
-  return attachments
-    .filter((attachment) => attachment.url)
-    .map((attachment, index) => `${attachment.name || `anexo-${index + 1}`}: <${attachment.url}>`)
-    .join("\n");
-}
-
-function truncateRelayContent(content) {
-  const text = String(content || "").trim();
-  if (text.length <= MAX_RELAY_CONTENT_LENGTH) {
-    return text;
+async function changeTicketParticipant(interaction, ticketId, adding) {
+  const ticket = await requireTicketForInteraction(interaction, ticketId);
+  if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+  if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) return replyEphemeral(interaction, "Este ticket está fechado.");
+  const targetId = interaction.values?.[0];
+  const member = await interaction.guild.members.fetch({ user: targetId, force: true });
+  if (member.user.bot || targetId === ticket.ownerId || isTicketSupport(member, ticket.categoryType)) {
+    return replyEphemeral(interaction, "O titular, o bot e a equipe mantêm o acesso definido pelas permissões do ticket.");
   }
-
-  return `${text.slice(0, MAX_RELAY_CONTENT_LENGTH - 40)}\n\n[Mensagem truncada no Discord; transcript contem o texto salvo.]`;
-}
-
-function buildAttachmentFiles(attachments) {
-  return attachments
-    .filter((attachment) => attachment.url)
-    .slice(0, 10)
-    .map((attachment, index) => ({
-      attachment: attachment.url,
-      name: attachment.name || `anexo-${index + 1}`,
-    }));
-}
-
-async function sendWithAttachmentFallback(target, payload, attachments, contextLabel) {
-  const basePayload = {
-    ...payload,
-    content: truncateRelayContent(payload.content),
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
-  };
-  const files = buildAttachmentFiles(attachments);
-
-  if (!files.length) {
-    return target.send(basePayload);
+  if (ticket.categoryType === "coordination") {
+    return replyEphemeral(interaction, "Tickets de Coordenação são restritos ao titular, Coordenação e Administração.");
   }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const channel = await fetchStaffChannel(interaction.client, ticket);
+  await channel.permissionOverwrites.edit(targetId, {
+    ViewChannel: adding, SendMessages: adding, AttachFiles: adding, ReadMessageHistory: adding,
+  });
+  await Ticket.updateOne({ ticketId }, adding ? { $addToSet: { participantIds: targetId } } : { $pull: { participantIds: targetId } });
+  await logTicketAction(interaction.client, { ticket, action: adding ? "TICKET_ADD_USER" : "TICKET_REMOVE_USER", executorId: interaction.user.id, targetId });
+  return replyEphemeral(interaction, adding ? "Usuário adicionado ao ticket." : "Usuário removido do ticket.");
+}
 
+async function deleteTicketChannel(interaction, ticketId, confirmed) {
+  const ticket = await requireTicketForInteraction(interaction, ticketId);
+  if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+  if (ticket.status !== "closed") return replyEphemeral(interaction, "Feche o ticket antes de excluir o canal.");
+  if (!ticket.finalizedAt) return replyEphemeral(interaction, "Conclua o fechamento com /ticket fechar antes de excluir o canal.");
+  if (!confirmed) return replyEphemeral(interaction, "Excluir definitivamente o canal? O transcript será preservado.", { components: buildDeleteConfirmComponents(ticketId) });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  return withCategoryLock(async () => {
+    const current = await Ticket.findOne(buildTicketScopeQuery({ ticketId }));
+    if (current?.status !== "closed") return replyEphemeral(interaction, "O ticket foi reaberto; a exclusão foi cancelada.");
+    const channel = await fetchStaffChannel(interaction.client, current);
+    if (!channel || channel.type !== ChannelType.GuildText) return replyEphemeral(interaction, "Canal do ticket não encontrado.");
+    await generateAndSendTranscript(interaction.client, current);
+    await logTicketAction(interaction.client, { ticket: current, action: "TICKET_DELETE", executorId: interaction.user.id });
+    await replyEphemeral(interaction, "Transcript salvo. Excluindo o canal.");
+    await channel.delete(`Ticket excluído por ${interaction.user.id}`);
+    current.channelDeletedAt = new Date();
+    await current.save();
+    await cleanupTicketCategory(channel.guild, channel.parentId);
+  });
+}
+
+async function handleTicketChannelDelete(channel, client) {
+  if (!config.tickets.enabled || channel.guildId !== getTicketGuildId()) return;
   try {
-    return await target.send({
-      ...basePayload,
-      files,
+    await withCategoryLock(async () => {
+      const ticket = await Ticket.findOne(buildTicketScopeQuery({ channelId: channel.id }));
+      if (ticket && ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+        ticket.status = "closed"; ticket.closedAt = new Date();
+        ticket.closedBy = client.user.id; ticket.closeReason = "Canal excluído diretamente no Discord.";
+        await ticket.save();
+        await logTicketAction(client, { ticket, action: "TICKET_CHANNEL_REMOVED", executorId: client.user.id });
+      }
+      if (ticket) { ticket.channelDeletedAt = new Date(); await ticket.save(); }
+      await cleanupTicketCategory(channel.guild, channel.parentId);
     });
+    await refreshSupportPanel(client);
   } catch (error) {
-    log.warn(`Nao foi possivel reenviar anexos como arquivo (${contextLabel}). Usando links.`, error);
-    const attachmentLinks = formatAttachmentLinks(attachments);
-    const fallbackContent = truncateRelayContent([basePayload.content, attachmentLinks && `Anexos:\n${attachmentLinks}`]
-      .filter(Boolean)
-      .join("\n\n"));
-
-    return target.send({
-      ...basePayload,
-      content: fallbackContent || "Mensagem com anexos.",
-    });
-  }
-}
-
-function buildUserRelayContent(ticket, message, attachments) {
-  const attachmentNotice = attachments.length && !message.content ? "O jogador enviou anexo." : "";
-  return truncateRelayContent(
-    [
-      `**Jogador:** <@${ticket.userId}> (${message.author.tag || message.author.id})`,
-      ticket.status === "paused" ? `**Status:** ${getStatusLabel(ticket.status)}` : "",
-      message.content || attachmentNotice,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-  );
-}
-
-function buildStaffRelayContent(ticket, message, attachments) {
-  const staffName = message.member?.displayName || message.author.globalName || message.author.username || message.author.id;
-  const responseHeader = config.tickets.showStaffIdentity
-    ? `**Resposta da equipe Rede Lhama - ${escapeDiscordText(staffName)}:**`
-    : "**Resposta da equipe Rede Lhama:**";
-  const attachmentNotice = attachments.length && !message.content ? "A equipe enviou anexo." : "";
-
-  return truncateRelayContent([responseHeader, message.content || attachmentNotice].filter(Boolean).join("\n"));
-}
-
-async function handleUserDmMessage(message, client) {
-  const ticket = await findActiveTicketByUser(message.author.id);
-
-  if (!ticket) {
-    await message.channel
-      .send({
-        content: "Voce nao possui ticket aberto. Use o painel de atendimento no servidor para iniciar um novo atendimento.",
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(() => null);
-    return true;
-  }
-
-  const staffChannel = await fetchStaffChannel(client, ticket);
-  if (!staffChannel) {
-    await message.channel
-      .send({
-        content: "Nao encontrei o canal interno deste atendimento. A equipe foi notificada.",
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(() => null);
-    await logTicketAction(client, {
-      ticket,
-      action: "TICKET_RELAY_FAILED",
-      executorId: message.author.id,
-      metadata: {
-        reason: "staffChannelId not found",
-      },
-    });
-    return true;
-  }
-
-  if (await TicketMessage.exists({ sourceMessageId: message.id })) {
-    return true;
-  }
-
-  const attachments = extractMessageAttachments(message);
-  const content = buildUserRelayContent(ticket, message, attachments);
-  const targetMessage = await sendWithAttachmentFallback(
-    staffChannel,
-    {
-      content,
-    },
-    attachments,
-    `DM -> staff channel ${ticket.ticketId}`,
-  );
-
-  await recordTicketMessage(ticket, {
-    direction: "user_to_staff",
-    authorId: message.author.id,
-    authorTag: message.author.tag || message.author.id,
-    content: message.content || "",
-    attachments,
-    sourceMessageId: message.id,
-    sourceChannelId: message.channelId,
-    targetMessageId: targetMessage.id,
-    targetChannelId: staffChannel.id,
-    createdAt: message.createdAt,
-  });
-  await logTicketAction(client, {
-    ticket,
-    action: "TICKET_RELAY_USER",
-    executorId: message.author.id,
-    metadata: {
-      sourceMessageId: message.id,
-      targetMessageId: targetMessage.id,
-      attachments: attachments.length,
-    },
-  });
-  return true;
-}
-
-async function handleStaffChannelMessage(message, client) {
-  if (!isSendableTextChannel(message.channel) || message.guildId !== getTicketGuildId()) {
-    return false;
-  }
-
-  const ticket = await findTicketByStaffChannel(message.channel.id);
-  if (!ticket) {
-    return false;
-  }
-
-  if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
-    await message
-      .reply({
-        content: "Este ticket esta fechado. Reabra o atendimento antes de responder ao jogador.",
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(() => null);
-    return true;
-  }
-
-  const member = message.member || (await message.guild.members.fetch(message.author.id).catch(() => null));
-  if (!isTicketSupport(member, ticket.categoryType)) {
-    await message
-      .reply({
-        content: "Voce nao possui permissao para responder este ticket.",
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(() => null);
-    return true;
-  }
-
-  if (await TicketMessage.exists({ sourceMessageId: message.id })) {
-    return true;
-  }
-
-  const attachments = extractMessageAttachments(message);
-  if (!message.content && !attachments.length) {
-    return true;
-  }
-
-  const user = await client.users.fetch(ticket.userId).catch(() => null);
-  const content = buildStaffRelayContent(ticket, message, attachments);
-  let targetMessage = null;
-
-  if (user) {
-    targetMessage = await sendWithAttachmentFallback(
-      user,
-      {
-        content,
-      },
-      attachments,
-      `staff channel -> DM ${ticket.ticketId}`,
-    ).catch((error) => {
-      log.warn(`Nao foi possivel enviar resposta do ticket ${ticket.ticketId} para DM.`, error);
-      return null;
-    });
-  }
-
-  await recordTicketMessage(ticket, {
-    direction: "staff_to_user",
-    authorId: message.author.id,
-    authorTag: message.author.tag || message.author.id,
-    content: message.content || "",
-    attachments,
-    sourceMessageId: message.id,
-    sourceChannelId: message.channelId,
-    targetMessageId: targetMessage?.id || "",
-    targetChannelId: targetMessage?.channelId || "",
-    delivered: Boolean(targetMessage),
-    createdAt: message.createdAt,
-  });
-
-  if (!targetMessage) {
-    await message
-      .reply({
-        content: "Nao consegui entregar esta mensagem na DM do jogador.",
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(() => null);
-  }
-
-  await logTicketAction(client, {
-    ticket,
-    action: "TICKET_RELAY_STAFF",
-    executorId: message.author.id,
-    targetId: ticket.userId,
-    metadata: {
-      sourceMessageId: message.id,
-      targetMessageId: targetMessage?.id || "",
-      attachments: attachments.length,
-      delivered: Boolean(targetMessage),
-    },
-  });
-  return true;
-}
-
-async function handleTicketMessage(message, client) {
-  if (!config.tickets.enabled || !message || message.author?.bot || message.webhookId) {
-    return false;
-  }
-
-  try {
-    const fullMessage = message.partial ? await message.fetch().catch(() => message) : message;
-
-    if (!fullMessage.guildId && fullMessage.channel?.type === ChannelType.DM) {
-      return handleUserDmMessage(fullMessage, client);
-    }
-
-    return handleStaffChannelMessage(fullMessage, client);
-  } catch (error) {
-    log.error("Falha ao processar mensagem de ticket.", error);
-    return true;
-  }
-}
-
-async function closeLegacyActiveTickets(client) {
-  const now = new Date();
-  const result = await Ticket.updateMany(
-    {
-      systemVersion: {
-        $ne: MODMAIL_SYSTEM_VERSION,
-      },
-      status: {
-        $in: ["open", "claimed"],
-      },
-    },
-    {
-      $set: {
-        status: "legacy_closed",
-        closedAt: now,
-        closedBy: client.user?.id || "",
-        closeReason: "Ticket legado encerrado na migracao para ModMail.",
-        legacyClosedAt: now,
-      },
-    },
-  );
-
-  if (result.modifiedCount) {
-    log.warn(`${result.modifiedCount} ticket(s) legado(s) aberto(s) foram marcados como legacy_closed.`);
+    log.error("Falha ao reconciliar exclusão de canal de ticket.", error);
   }
 }
 
 async function initializeTickets(client) {
-  if (!config.tickets.enabled) {
-    log.info("Sistema de tickets desativado.");
-    return;
-  }
-
+  if (!config.tickets.enabled) return;
   await ensureTicketIndexes();
-  await closeLegacyActiveTickets(client);
-
-  if (!config.tickets.staffCategoryId) {
-    log.warn("DISCORD_TICKET_STAFF_CATEGORY_ID nao configurado. O painel abre, mas novos tickets nao serao criados.");
-  }
-
-  const openTickets = await Ticket.find(
-    buildTicketScopeQuery({
-      status: {
-        $in: ACTIVE_TICKET_STATUSES,
-      },
-    }),
-  );
-
-  for (const ticket of openTickets) {
-    const staffChannel = await fetchStaffChannel(client, ticket);
-    if (!staffChannel) {
-      log.warn(`Ticket #${formatTicketNumber(ticket.ticketNumber)} esta ativo, mas o canal ${ticket.staffChannelId} nao foi encontrado.`);
-      continue;
+  const latest = await Ticket.findOne({ guildId: getTicketGuildId() }).sort({ ticketNumber: -1 });
+  await TicketCounter.findOneAndUpdate({ guildId: getTicketGuildId() },
+    { $max: { seq: latest?.ticketNumber || 0 } }, { upsert: true, setDefaultsOnInsert: false });
+  const guild = await resolveStaffGuild(client);
+  await withCategoryLock(async () => {
+    await orderCategories(guild);
+    const tickets = await Ticket.find(buildTicketScopeQuery());
+    const channels = await guild.channels.fetch();
+    for (const ticket of tickets) {
+      if (ticket.channelId && !channels.has(ticket.channelId) && ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+        ticket.status = "closed"; ticket.closedAt = new Date();
+        ticket.closedBy = client.user.id; ticket.closeReason = "Canal removido enquanto o bot estava offline.";
+        ticket.channelDeletedAt = new Date();
+        await ticket.save();
+      }
     }
-
-    await applyViewAllTicketRolePermissions(staffChannel);
-    await refreshStaffChannelPanel(client, ticket);
-  }
-
-  await upsertSupportPanel(client);
-  log.info("Sistema de tickets ModMail inicializado.");
-}
-
-async function clearBotDmMessagesFromCommand(client, interaction, requestedLimit) {
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction
-      .deferReply(interaction.guildId ? { flags: MessageFlags.Ephemeral } : {})
-      .catch(() => null);
-  }
-
-  const limit = normalizeDmClearLimit(requestedLimit);
-  const dmChannel = await interaction.user.createDM().catch((error) => {
-    log.warn(`Nao foi possivel abrir DM para limpar mensagens de ${interaction.user.id}.`, error);
-    return null;
+    const { TicketCategory } = require("./ticket-models");
+    for (const record of await TicketCategory.find({ guildId: guild.id })) {
+      await cleanupTicketCategory(guild, record.discordCategoryId);
+    }
   });
-
-  if (!dmChannel?.messages?.fetch) {
-    await replyEphemeral(interaction, "Nao consegui abrir sua DM para limpar as mensagens do bot.");
-    return;
-  }
-
-  let before = null;
-  let scannedCount = 0;
-  let attemptedCount = 0;
-  let deletedCount = 0;
-  let failedCount = 0;
-  let fetchFailed = false;
-
-  while (attemptedCount < limit && scannedCount < MAX_DM_CLEAR_SCAN_COUNT) {
-    const fetchLimit = Math.min(DM_CLEAR_FETCH_BATCH_SIZE, MAX_DM_CLEAR_SCAN_COUNT - scannedCount);
-    const fetchOptions = before
-      ? {
-          limit: fetchLimit,
-          before,
-        }
-      : {
-          limit: fetchLimit,
-        };
-
-    const messages = await dmChannel.messages.fetch(fetchOptions).catch((error) => {
-      fetchFailed = true;
-      log.warn(`Nao foi possivel buscar mensagens da DM de ${interaction.user.id}.`, error);
-      return null;
-    });
-
-    if (!messages?.size) {
-      break;
-    }
-
-    scannedCount += messages.size;
-    before = getOldestFetchedMessageId(messages);
-
-    for (const message of messages.values()) {
-      if (attemptedCount >= limit) {
-        break;
-      }
-
-      if (message.author?.id !== client.user?.id) {
-        continue;
-      }
-
-      attemptedCount += 1;
-      const deletedMessage = await message.delete().catch(() => null);
-      if (deletedMessage) {
-        deletedCount += 1;
-      } else {
-        failedCount += 1;
-      }
-    }
-
-    if (messages.size < fetchLimit) {
-      break;
-    }
-  }
-
-  const summary = deletedCount > 0
-    ? `Limpei ${deletedCount} mensagem(ns) do bot na sua DM.`
-    : attemptedCount > 0
-      ? "Encontrei mensagens do bot na sua DM, mas nao consegui apagar nenhuma."
-      : "Nao encontrei mensagens recentes do bot para apagar na sua DM.";
-
-  await replyEphemeral(
-    interaction,
-    [
-      summary,
-      failedCount ? `${failedCount} mensagem(ns) do bot nao puderam ser apagadas.` : "",
-      fetchFailed ? "Nao consegui ler todo o historico da DM." : "",
-      "Mensagens enviadas por voce nao podem ser apagadas pelo bot.",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-  );
+  await upsertSupportPanel(client);
+  log.info("Sistema de tickets por canais privados inicializado.");
 }
 
 async function clearTicketDatabaseFromCommand(client, interaction, options = {}) {
@@ -2127,7 +1664,7 @@ async function clearTicketDatabaseFromCommand(client, interaction, options = {})
   if (options.scope === TICKET_DATABASE_CLEAR_SCOPES.CURRENT_TICKET) {
     const ticket = await Ticket.findOne({
       guildId,
-      staffChannelId: interaction.channelId,
+      channelId: interaction.channelId,
     }).sort({ createdAt: -1 });
 
     if (!ticket) {
@@ -2149,7 +1686,7 @@ async function clearTicketDatabaseFromCommand(client, interaction, options = {})
     stats = await clearScopedTicketDatabaseRecords(
       {
         guildId,
-        userId: options.user.id,
+        ownerId: options.user.id,
       },
       {
         userId: options.user.id,
@@ -2192,10 +1729,10 @@ async function showTicketInfo(interaction) {
     [
       `Ticket #${formatTicketNumber(ticket.ticketNumber)}`,
       `Categoria: ${categoryConfig.name || ticket.categoryType}`,
-      `Jogador: <@${ticket.userId}>`,
+      `Jogador: <@${ticket.ownerId}>`,
       `Status: ${getStatusLabel(ticket.status)}`,
       `Responsavel: ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Nao definido"}`,
-      `Canal: <#${ticket.staffChannelId}>`,
+      `Canal: <#${ticket.channelId}>`,
     ].join("\n"),
   );
 }
@@ -2206,7 +1743,8 @@ async function closeTicketFromCommand(client, interaction, reason) {
     return;
   }
 
-  await closeTicket(interaction, ticket.ticketId, reason || "Resolvido");
+  if (!reason?.trim()) return showCloseConfirmation(interaction, ticket.ticketId);
+  await closeTicket(interaction, ticket.ticketId, reason);
   await refreshSupportPanel(client);
 }
 
@@ -2335,18 +1873,17 @@ async function showBlacklistEntry(interaction, user) {
 
 module.exports = {
   addBlacklistEntry,
-  clearBotDmMessagesFromCommand,
   clearTicketDatabaseFromCommand,
-  closeTicketFromCommand,
+  closeTicketFromCommand: ticketCommand(closeTicketFromCommand),
   handleTicketInteraction,
-  handleTicketMessage,
+  handleTicketChannelDelete,
   initializeTickets,
-  pauseTicketFromCommand,
+  pauseTicketFromCommand: ticketCommand(pauseTicketFromCommand),
   refreshSupportPanel,
   removeBlacklistEntry,
-  reopenTicketFromCommand,
-  resumeTicketFromCommand,
-  sendTranscriptFromCommand,
+  reopenTicketFromCommand: ticketCommand(reopenTicketFromCommand),
+  resumeTicketFromCommand: ticketCommand(resumeTicketFromCommand),
+  sendTranscriptFromCommand: ticketCommand(sendTranscriptFromCommand),
   showBlacklistEntry,
   showTicketInfo,
   upsertSupportPanel,

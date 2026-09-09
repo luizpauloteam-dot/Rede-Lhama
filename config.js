@@ -90,6 +90,7 @@ const suggestionDataDir = path.join(process.cwd(), "data", "suggestions");
 
 function buildDescriptionModalFields() {
   return [
+    { id: "minecraftNick", label: "Nick no Minecraft", style: "short", minLength: 3, maxLength: 16, required: true },
     { id: "description", label: "Descricao", style: "paragraph", minLength: 10, maxLength: 900, required: true },
   ];
 }
@@ -161,25 +162,25 @@ const config = {
   },
   tickets: {
     enabled: parseBoolean(process.env.TICKETS_ENABLED, true),
-    guildId: String(process.env.DISCORD_TICKET_GUILD_ID || "1541296952514187397").trim(),
+    guildId: "1541296952514187397",
     dataDir: ticketDataDir,
     panelMessageFilePath: resolveLocalPath(
       process.env.TICKET_PANEL_MESSAGE_FILE,
       path.join(ticketDataDir, "panel-message.json"),
     ),
     panelChannelId: String(process.env.DISCORD_TICKET_PANEL_CHANNEL_ID || "").trim(),
-    staffCategoryId: String(process.env.DISCORD_TICKET_STAFF_CATEGORY_ID || "1543498767112732692").trim(),
+    anchorCategoryId: "1541597285115371570",
+    protectedCategoryIds: parseList(process.env.DISCORD_TICKET_PROTECTED_CATEGORY_IDS),
     logChannelId: String(process.env.DISCORD_TICKET_LOG_CHANNEL_ID || process.env.DISCORD_LOG_CHANNEL_ID || "").trim(),
     transcriptChannelId: String(process.env.DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID || "").trim(),
     reviewChannelId: String(process.env.DISCORD_TICKET_REVIEW_CHANNEL_ID || "").trim(),
-    maxActiveTicketsPerUser: parsePositiveInteger(process.env.TICKET_MAX_ACTIVE_TICKETS_PER_USER, 1, 1),
+    maxActiveTicketsPerUser: 1,
     showStaffIdentity: parseBoolean(process.env.TICKET_SHOW_STAFF_IDENTITY, false),
     openCooldownSeconds: parseNonNegativeInteger(process.env.TICKET_OPEN_COOLDOWN_SECONDS, 30),
     callCooldownMs: parsePositiveInteger(process.env.TICKET_CALL_COOLDOWN_MS, 300000, 60000),
     supportRoles: parseList(process.env.DISCORD_TICKET_SUPPORT_ROLE_IDS),
     coordinationRoles: parseList(process.env.DISCORD_TICKET_COORDINATION_ROLE_IDS),
     administratorRoles: parseList(process.env.DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS),
-    viewAllRoles: parseList(process.env.DISCORD_TICKET_VIEW_ALL_ROLE_IDS || "1543506338603204618"),
     bannerUrl: "https://i.imgur.com/kX0lTKL.png",
     closedBannerUrl: "https://i.imgur.com/kX0lTKL.png",
     waitThresholds: {
@@ -189,17 +190,17 @@ const config = {
     },
     categories: {
       doubts: {
-        name: "Tirar duvidas",
-        staffChannelPrefix: "duvida",
-        emoji: "❔",
+        name: "Tirar dúvidas",
+        categoryName: "📁・DÚVIDAS",
+        emoji: "🤔",
         description: "Obter esclarecimento sobre duvidas.",
         order: 1,
-        modalTitle: "Tirar duvidas",
+        modalTitle: "Tirar dúvidas",
         modalFields: ticketModalFields.doubts,
       },
       bugs: {
         name: "Reportar erros",
-        staffChannelPrefix: "erro",
+        categoryName: "📁・REPORTAR-ERROS",
         emoji: "🛠️",
         description: "Reportar um erro ou bug encontrado.",
         order: 2,
@@ -208,7 +209,7 @@ const config = {
       },
       report: {
         name: "Denunciar",
-        staffChannelPrefix: "denuncia",
+        categoryName: "📁・DENÚNCIAS",
         emoji: "📢",
         description: "Reportar um jogador.",
         order: 3,
@@ -216,17 +217,17 @@ const config = {
         modalFields: ticketModalFields.report,
       },
       appeal: {
-        name: "Apelar punicao",
-        staffChannelPrefix: "apelacao",
+        name: "Apelar punição",
+        categoryName: "📁・APELAÇÕES",
         emoji: "⚖️",
         description: "Solicitar revisao de punicao.",
         order: 4,
-        modalTitle: "Apelar punicao",
+        modalTitle: "Apelar punição",
         modalFields: ticketModalFields.appeal,
       },
       password: {
         name: "Esqueci a minha senha",
-        staffChannelPrefix: "senha",
+        categoryName: "📁・RECUPERAÇÃO",
         emoji: "🔐",
         description: "Recuperar senha da conta.",
         order: 5,
@@ -234,8 +235,8 @@ const config = {
         modalFields: ticketModalFields.password,
       },
       donation: {
-        name: "Problemas com doacoes em nosso site",
-        staffChannelPrefix: "doacao",
+        name: "Problemas com doações em nosso site",
+        categoryName: "📁・DOAÇÕES",
         emoji: "🛒",
         description: "Relatar problemas com doacoes.",
         order: 6,
@@ -243,8 +244,8 @@ const config = {
         modalFields: ticketModalFields.donation,
       },
       coordination: {
-        name: "Falar apenas com a Coordenacao",
-        staffChannelPrefix: "coordenacao",
+        name: "Falar apenas com a Coordenação",
+        categoryName: "📁・COORDENAÇÃO",
         emoji: "👑",
         description: "Falar diretamente com a coordenacao.",
         order: 7,
@@ -252,8 +253,8 @@ const config = {
         modalFields: ticketModalFields.coordination,
       },
       other: {
-        name: "Outro assunto nao listado",
-        staffChannelPrefix: "outro",
+        name: "Outro assunto não listado",
+        categoryName: "📁・OUTROS",
         emoji: "🔎",
         description: "Abrir um ticket para outro assunto.",
         order: 8,
