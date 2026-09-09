@@ -13,7 +13,7 @@ function withCategoryLock(operation) {
 }
 
 function isProtectedCategory(id) {
-  return id === config.tickets.anchorCategoryId || config.tickets.protectedCategoryIds.includes(id);
+  return id === config.tickets.anchorCategoryId || id === config.tickets.closedCategoryId || config.tickets.protectedCategoryIds.includes(id);
 }
 
 async function orderCategories(guild) {

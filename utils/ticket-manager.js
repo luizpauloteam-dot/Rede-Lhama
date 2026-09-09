@@ -1,5 +1,6 @@
 const fs = require("fs").promises;
 const path = require("path");
+const timers = require("node:timers/promises");
 
 const {
   ChannelType,
@@ -23,6 +24,7 @@ const {
 const {
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
+  buildCloseConfirmComponents,
   buildDeleteConfirmComponents,
   buildReviewModal,
   buildStaffChannelComponents,
@@ -30,8 +32,9 @@ const {
   buildTicketArchivedComponents,
   buildTicketClosedComponents,
   buildTicketManageComponents,
+  getTicketManageOptions,
   buildTicketReviewComponents,
-  buildUserSelectRow,
+  buildUserSelectModal,
   getStatusLabel,
 } = require("./ticket-components");
 const {
@@ -44,6 +47,7 @@ const { logTicketAction } = require("./ticket-logger");
 const { generateAndSendTranscript } = require("./ticket-transcript");
 const {
   buildTicketOverwrites,
+  getTicketNotificationRoleIds,
   isTicketAdministrator,
   isTicketSupport,
 } = require("./ticket-permissions");
@@ -649,7 +653,7 @@ async function reserveTicket(interaction, categoryType, formData) {
 
 async function createStaffChannel(client, category, ticket, user) {
   const channel = await category.guild.channels.create({
-    name: buildTicketChannelName(ticket), type: ChannelType.GuildText, parent: category.id,
+    name: buildTicketChannelName(ticket, user), type: ChannelType.GuildText, parent: category.id,
     permissionOverwrites: buildTicketOverwrites(category.guild, ticket.categoryType, ticket.ownerId),
     topic: `Ticket ${ticket.ticketId} | Usuário ${ticket.ownerId} | Categoria ${ticket.categoryType}`,
     reason: `Ticket #${formatTicketNumber(ticket.ticketNumber)} aberto por ${user.id}`,
@@ -659,7 +663,8 @@ async function createStaffChannel(client, category, ticket, user) {
   try {
     await ticket.save();
     const message = await channel.send({ flags: MessageFlags.IsComponentsV2,
-      components: buildStaffChannelComponents(ticket), allowedMentions: SAFE_ALLOWED_MENTIONS });
+      components: buildStaffChannelComponents(ticket),
+      allowedMentions: { ...SAFE_ALLOWED_MENTIONS, roles: getTicketNotificationRoleIds(ticket.categoryType) } });
     ticket.controlMessageId = message.id;
     await ticket.save();
   } catch (error) {
@@ -811,7 +816,7 @@ async function handleCategoryModalSubmit(interaction) {
   return true;
 }
 
-async function requireTicketForInteraction(interaction, ticketId) {
+async function requireTicketForInteraction(interaction, ticketId, { allowDm = false } = {}) {
   const ticket = await Ticket.findOne(
     buildTicketScopeQuery({
       ticketId,
@@ -820,7 +825,7 @@ async function requireTicketForInteraction(interaction, ticketId) {
 
   if (
     !ticket ||
-    ticket.guildId !== interaction.guildId
+    (ticket.guildId !== interaction.guildId && !(allowDm && !interaction.guildId))
   ) {
     await replyEphemeral(interaction, "Ticket nao encontrado.");
     return null;
@@ -954,19 +959,22 @@ async function sendUserSelect(interaction, ticketId, action, placeholder) {
     return true;
   }
 
-  await replyEphemeral(interaction, "Selecione o membro da equipe.", {
-    components: [buildUserSelectRow(`${action}:${ticketId}`, placeholder)],
-  });
+  if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) return replyEphemeral(interaction, "Este ticket está fechado.");
+  const titles = {
+    "ticket:transfer-select": "Transferir atendimento",
+    "ticket:add-user-select": "Adicionar usuário",
+    "ticket:remove-user-select": "Remover usuário",
+  };
+  await interaction.showModal(buildUserSelectModal(`${action}-modal:${ticketId}`, titles[action], placeholder));
   return true;
 }
 
-async function handleTransferSelect(interaction, ticketId) {
+async function handleTransferSelect(interaction, ticketId, targetId = interaction.values?.[0]) {
   const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket || !(await requireStaff(interaction, ticket))) {
     return true;
   }
 
-  const targetId = interaction.values?.[0];
   const guild = interaction.guild || (await resolveStaffGuild(interaction.client));
   const targetMember = await guild.members.fetch(targetId).catch(() => null);
 
@@ -1108,14 +1116,43 @@ async function resumeTicket(interaction, ticketId) {
 async function showCloseConfirmation(interaction, ticketId) {
   const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket || !(await requireStaff(interaction, ticket))) return true;
-  await interaction.showModal(buildTicketActionModal(ticketId, "close", "Fechar ticket", "Motivo do fechamento", 700));
+  await replyEphemeral(interaction, "# Deseja realmente fechar este ticket?", {
+    components: buildCloseConfirmComponents(ticketId),
+  });
   return true;
 }
 
 async function sendTicketReview(client, ticket) {
-  const channel = await fetchStaffChannel(client, ticket);
-  return channel.send({ flags: MessageFlags.IsComponentsV2,
-    components: buildTicketClosedComponents(ticket), allowedMentions: SAFE_ALLOWED_MENTIONS });
+  try {
+    const user = await client.users.fetch(ticket.ownerId);
+    return await user.send({ flags: MessageFlags.IsComponentsV2,
+      components: buildTicketClosedComponents(ticket), allowedMentions: SAFE_ALLOWED_MENTIONS });
+  } catch (error) {
+    log.warn(`Não foi possível enviar a avaliação por DM do ticket ${ticket.ticketId}.`, error);
+    return null;
+  }
+}
+
+async function archiveTicketChannel(client, ticket) {
+  return withCategoryLock(async () => {
+    const guild = await resolveStaffGuild(client);
+    const channels = await guild.channels.fetch();
+    const category = channels.get(config.tickets.closedCategoryId);
+    if (category?.type !== ChannelType.GuildCategory) throw new Error("Categoria de tickets fechados não encontrada.");
+    const channel = await fetchStaffChannel(client, ticket);
+    if (!channel) throw new Error("Canal do ticket não encontrado.");
+    if (channel.parentId !== category.id && channels.filter((entry) => entry.parentId === category.id).size >= 50) {
+      throw new Error("A categoria de tickets fechados está cheia.");
+    }
+    const user = await client.users.fetch(ticket.ownerId);
+    const username = require("./ticket-common").normalizeDiscordName(user.username) || ticket.ownerId;
+    const previousCategoryId = channel.parentId;
+    await channel.edit({ parent: category.id, lockPermissions: false, name: `closed-${username}`.slice(0, 100),
+      reason: "Arquivamento de ticket fechado" });
+    ticket.categoryId = category.id;
+    await ticket.save();
+    await cleanupTicketCategory(guild, previousCategoryId);
+  });
 }
 
 async function closeTicket(interaction, ticketId, reason) {
@@ -1126,6 +1163,23 @@ async function closeTicket(interaction, ticketId, reason) {
   const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket || !(await requireStaff(interaction, ticket))) {
     return true;
+  }
+
+  if (ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+    const channel = await fetchStaffChannel(interaction.client, ticket);
+    const countdownMessage = await channel.send({
+      content: `## Este suporte será fechado em **${config.tickets.closeDelaySeconds}** segundos...`,
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
+    });
+    for (let remaining = config.tickets.closeDelaySeconds - 1; remaining >= 0; remaining -= 1) {
+      await timers.setTimeout(1000);
+      await countdownMessage.edit({
+        content: remaining > 0
+          ? `## Este suporte será fechado em **${remaining}** ${remaining === 1 ? "segundo" : "segundos"}...`
+          : "## Fechando este suporte...",
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
+      });
+    }
   }
 
   let updatedTicket = await Ticket.findOneAndUpdate(
@@ -1172,6 +1226,8 @@ async function closeTicket(interaction, ticketId, reason) {
     metadata: transcript,
   });
 
+  await archiveTicketChannel(interaction.client, updatedTicket);
+
   const finalMessage = await sendTicketReview(interaction.client, updatedTicket);
   updatedTicket.finalMessageId = finalMessage?.id || "";
   await updatedTicket.save();
@@ -1192,15 +1248,17 @@ async function closeTicket(interaction, ticketId, reason) {
   await replyEphemeral(
     interaction,
     finalMessage
-      ? "Ticket finalizado, transcript salvo e avaliação enviada no canal."
-      : "Ticket finalizado e transcript salvo; avaliação indisponível.",
+      ? "Ticket arquivado, transcript salvo e avaliação enviada por DM."
+      : "Ticket arquivado e transcript salvo. Não foi possível enviar a avaliação: a DM do usuário está indisponível.",
+    { components: [] },
   );
   await refreshSupportPanel(interaction.client);
   return true;
 }
 
 async function confirmCloseTicket(interaction, ticketId) {
-  return showCloseConfirmation(interaction, ticketId);
+  await interaction.deferUpdate();
+  return closeTicket(interaction, ticketId, "Fechamento confirmado pela equipe.");
 }
 
 async function cancelCloseTicket(interaction) {
@@ -1272,6 +1330,14 @@ async function reopenTicket(client, interaction, ticket) {
   }
 
   const channel = await fetchStaffChannel(client, updatedTicket);
+  await withCategoryLock(async () => {
+    const category = await resolveTicketCategory(channel.guild, updatedTicket.categoryType);
+    const user = await client.users.fetch(updatedTicket.ownerId);
+    await channel.edit({ parent: category.id, lockPermissions: false, name: buildTicketChannelName(updatedTicket, user),
+      reason: "Reabertura do ticket" });
+    updatedTicket.categoryId = category.id;
+    await updatedTicket.save();
+  });
   for (const userId of [updatedTicket.ownerId, ...(updatedTicket.participantIds || [])]) {
     await channel.permissionOverwrites.edit(userId, { SendMessages: true, AttachFiles: true });
   }
@@ -1318,7 +1384,7 @@ async function handleReviewRating(interaction, ticketId, rating) {
     return true;
   }
 
-  const ticket = await requireTicketForInteraction(interaction, ticketId);
+  const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
   if (!ticket) {
     return true;
   }
@@ -1348,7 +1414,7 @@ async function handleReviewModal(interaction, ticketId, rating) {
     return true;
   }
 
-  const ticket = await requireTicketForInteraction(interaction, ticketId);
+  const ticket = await requireTicketForInteraction(interaction, ticketId, { allowDm: true });
   if (!ticket) {
     return true;
   }
@@ -1422,6 +1488,11 @@ async function handleTicketButton(interaction) {
 
   const [, action, ticketId] = interaction.customId.split(":");
 
+  return handleTicketAction(interaction, ticketId, action);
+}
+
+async function handleTicketAction(interaction, ticketId, action) {
+
   if (action === "add-user" || action === "remove-user") {
     return sendUserSelect(interaction, ticketId, `ticket:${action}-select`, "Selecione o usuário");
   }
@@ -1467,6 +1538,16 @@ async function handleTicketStringSelect(interaction) {
 
   const [, action, ticketId] = interaction.customId.split(":");
 
+  if (action === "manage-select") {
+    const ticket = await requireTicketForInteraction(interaction, ticketId);
+    if (!ticket || !(await requireStaff(interaction, ticket))) return true;
+    const selectedAction = interaction.values?.[0];
+    if (!getTicketManageOptions(ticket).some((option) => option.value === selectedAction)) {
+      return replyEphemeral(interaction, "Esta ação não está disponível para o estado atual do ticket.");
+    }
+    return handleTicketAction(interaction, ticketId, selectedAction);
+  }
+
   if (action === "review") return handleReviewSelect(interaction, ticketId);
 
   return false;
@@ -1495,6 +1576,13 @@ async function handleTicketModalSubmit(interaction) {
   }
 
   const [, action, ticketId, rating] = interaction.customId.split(":");
+
+  if (["transfer-select-modal", "add-user-select-modal", "remove-user-select-modal"].includes(action)) {
+    const targetId = interaction.fields.getSelectedUsers("target-user", true).firstKey();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (action === "transfer-select-modal") return handleTransferSelect(interaction, ticketId, targetId);
+    return changeTicketParticipant(interaction, ticketId, action === "add-user-select-modal", targetId);
+  }
 
   if (action === "review-modal") return handleReviewModal(interaction, ticketId, rating);
   if (action === "close-modal") {
@@ -1543,11 +1631,10 @@ async function handleTicketInteraction(interaction) {
   return false;
 }
 
-async function changeTicketParticipant(interaction, ticketId, adding) {
+async function changeTicketParticipant(interaction, ticketId, adding, targetId = interaction.values?.[0]) {
   const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket || !(await requireStaff(interaction, ticket))) return true;
   if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) return replyEphemeral(interaction, "Este ticket está fechado.");
-  const targetId = interaction.values?.[0];
   const member = await interaction.guild.members.fetch({ user: targetId, force: true });
   if (member.user.bot || targetId === ticket.ownerId || isTicketSupport(member, ticket.categoryType)) {
     return replyEphemeral(interaction, "O titular, o bot e a equipe mantêm o acesso definido pelas permissões do ticket.");
@@ -1555,7 +1642,7 @@ async function changeTicketParticipant(interaction, ticketId, adding) {
   if (ticket.categoryType === "coordination") {
     return replyEphemeral(interaction, "Tickets de Coordenação são restritos ao titular, Coordenação e Administração.");
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const channel = await fetchStaffChannel(interaction.client, ticket);
   await channel.permissionOverwrites.edit(targetId, {
     ViewChannel: adding, SendMessages: adding, AttachFiles: adding, ReadMessageHistory: adding,

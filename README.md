@@ -117,7 +117,7 @@ Cada sugestao publicada cria um topico para conversa, mostra botoes de voto na m
 
 ## Sistema de tickets
 
-Atendimento por canais privados `ticket-0001`, com MongoDB/Mongoose e Components V2. O servidor é fixo: `1541296952514187397`. O painel abre um formulário com nick e descrição; usuário e equipe conversam no próprio canal.
+Atendimento por canais privados `tipo-usuario`, com MongoDB/Mongoose e Components V2. O servidor é fixo: `1541296952514187397`. O painel abre um formulário com nick e descrição; usuário e equipe conversam no próprio canal.
 
 O bot cria as categorias DÚVIDAS, REPORTAR-ERROS, DENÚNCIAS, APELAÇÕES, RECUPERAÇÃO, DOAÇÕES, COORDENAÇÃO e OUTROS conforme a demanda, abaixo da âncora `1541597285115371570`. A âncora nunca recebe operações de edição ou exclusão. Somente categorias criadas pelo bot e registradas no MongoDB podem ser removidas; categorias normais, mesmo com nomes iguais, não são adotadas ou excluídas. Categorias cheias recebem instâncias `-2`, `-3`, reutilizando primeiro as que têm espaço. A remoção do último canal dispara uma verificação de canais e tickets ativos antes de excluir a categoria. A inicialização reconcilia exclusões ocorridas com o bot offline.
 
@@ -137,7 +137,7 @@ DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
 
 O bot precisa de Gerenciar canais, Gerenciar cargos (para sobrescritas), Ver canais, Enviar mensagens, Anexar arquivos e Ler histórico. Configure os cargos de atendimento explicitamente. A Coordenação não concede acesso aos cargos de suporte comum. Administrador do Discord sempre ignora restrições de canal. Logs e transcripts de Coordenação ficam no MongoDB/disco, sem publicação nos canais gerais; a equipe autorizada pode baixar o HTML pela ação Transcript.
 
-Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar no canal, renomear, fechar com motivo e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento salva o motivo, bloqueia mensagens dos participantes, gera HTML e publica avaliação de 1 a 5 no ticket. Avalie antes da exclusão definitiva do canal.
+Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar no canal, renomear, fechar e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento bloqueia mensagens dos participantes, gera HTML e move o canal para a categoria protegida `1541646616778514512`, com nome `closed-usuario`, preservando as permissões. A mensagem de finalização com avaliação de 1 a 5 é enviada por DM ao titular e pode ser respondida mesmo após excluir o canal, enquanto o registro existir. Se a DM estiver bloqueada, o fechamento continua e a equipe recebe um aviso. A reabertura retorna o canal à categoria automática e ao nome `tipo-usuario` correspondente.
 
 O transcript consulta todo o histórico disponível no Discord, incluindo anexos, imagens, avatares e datas. É salvo em `data/tickets/transcripts` (ou `TICKET_DATA_DIR/transcripts`) antes de qualquer exclusão pelo bot. Mensagens apagadas diretamente no Discord antes da geração não podem ser recuperadas. Mantenha backup desse diretório. `/ticket transcript` também entrega o arquivo ao atendente. O contador usa incremento atômico no MongoDB e não é apagado pela limpeza de registros.
 

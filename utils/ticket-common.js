@@ -76,8 +76,11 @@ function normalizeDiscordName(value) {
 
 
 
-function buildTicketChannelName(ticket) {
-  return `ticket-${formatTicketNumber(ticket.ticketNumber)}`;
+function buildTicketChannelName(ticket, user) {
+  const category = getTicketCategoryConfig(ticket.categoryType);
+  const type = normalizeDiscordName(category?.categoryName || ticket.categoryType) || "ticket";
+  const username = normalizeDiscordName(user?.username) || ticket.ownerId;
+  return `${type}-${username}`.slice(0, 100).replace(/-+$/g, "");
 }
 
 module.exports = {

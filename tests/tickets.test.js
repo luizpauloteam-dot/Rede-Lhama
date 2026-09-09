@@ -75,8 +75,8 @@ test("all eight categories and modal/panel payloads serialize with Components V2
   const panel = JSON.stringify(components.buildSupportPanelComponents({ openTicketCount: 0 }));
   assert(panel.includes("Selecione o tipo de atendimento!"));
   assert(!panel.includes("DM"));
-  assert.equal(buildTicketChannelName({ ticketNumber: 52 }), "ticket-0052");
-  assert.equal(buildTicketChannelName({ ticketNumber: 12345 }), "ticket-12345");
+  assert.equal(buildTicketChannelName(ticket, { username: "Jogador" }), "duvidas-jogador");
+  assert.equal(buildTicketChannelName({ ...ticket, categoryType: "report" }, { username: "João" }), "denuncias-joao");
   for (const build of [components.buildTicketManageComponents, components.buildTicketArchivedComponents, components.buildTicketClosedComponents]) assert(build(ticket).length);
 });
 
@@ -99,7 +99,7 @@ test("never deletes anchor, protected, ordinary or foreign categories", async (t
   mockCategories(t);
   const { guild, mutations } = fakeGuild();
   t.mock.property(config.tickets, "protectedCategoryIds", ["protected"]);
-  for (const id of [config.tickets.anchorCategoryId, "protected", "ordinary"]) assert.equal(await cleanupTicketCategory(guild, id), false);
+  for (const id of [config.tickets.anchorCategoryId, config.tickets.closedCategoryId, "protected", "ordinary"]) assert.equal(await cleanupTicketCategory(guild, id), false);
   assert.equal(await cleanupTicketCategory({ ...guild, id: "foreign" }, "category"), false);
   assert.deepEqual(mutations, []);
 });
@@ -181,7 +181,39 @@ test("schema preserves atomic counter key and version-scoped unique active owner
   assert.equal(active[1].partialFilterExpression.systemVersion, "private-channels-v1");
 });
 
-test("opening uses atomic numbering without DM, then closing persists reason, transcript and channel review", async (t) => {
+test("transfer opens a modal with User Select and validates the submitted member", async (t) => {
+  t.mock.property(config.tickets, "supportRoles", [staffId]);
+  t.mock.method(Ticket, "findOne", async () => ticket);
+  const staff = { roles: { cache: new Collection([[staffId, {}]]) }, permissions: new PermissionsBitField() };
+  const { i, replies } = interaction("manage-select", staff);
+  i.values = ["transfer"];
+  i.isButton = () => false;
+  i.isStringSelectMenu = () => true;
+  i.client.channels.cache.set(ticket.channelId, {
+    guildId, isTextBased: () => true, send: async () => {},
+    permissionsFor: () => new PermissionsBitField(PermissionsBitField.Flags.ViewChannel),
+  });
+  await handleTicketInteraction(i);
+  const modal = replies[0];
+  assert.equal(modal.custom_id, `ticket:transfer-select-modal:${ticket.ticketId}`);
+  assert.equal(modal.components[0].type, 18);
+  assert.equal(modal.components[0].component.type, 5);
+  assert.equal(modal.components[0].component.custom_id, "target-user");
+
+  i.customId = modal.custom_id;
+  i.isStringSelectMenu = () => false;
+  i.isModalSubmit = () => true;
+  i.fields = { getSelectedUsers: () => new Collection([[ownerId, { id: ownerId }]]) };
+  i.guild.members.fetch = async (target) => typeof target === "object" ? staff
+    : { roles: { cache: new Collection() }, permissions: new PermissionsBitField() };
+  i.deferReply = async () => { i.deferred = true; };
+  i.editReply = async (payload) => replies.push(payload);
+  await handleTicketInteraction(i);
+  assert(replies.at(-1).content.includes("Selecione um membro da equipe"));
+  assert.equal(ticket.assignedStaffId, undefined);
+});
+
+test("opening uses atomic numbering; closing archives with preserved permissions and sends review by DM", async (t) => {
   const fs = require("fs").promises;
   const writes = [];
   t.mock.method(fs, "mkdir", async () => {});
@@ -208,13 +240,22 @@ test("opening uses atomic numbering without DM, then closing persists reason, tr
     assert.equal(options.upsert, true); return { seq: 52 };
   });
   const { guild, channels } = fakeGuild();
-  const sent = []; const permissionEdits = [];
+  channels.set(config.tickets.closedCategoryId, { id: config.tickets.closedCategoryId, type: ChannelType.GuildCategory });
+  const sent = []; const permissionEdits = []; const directMessages = []; const countdownEdits = [];
   const createChannel = guild.channels.create;
   guild.channels.create = async (payload) => {
     const channel = await createChannel(payload);
     if (payload.type === ChannelType.GuildText) {
       channel.parentId = payload.parent;
-      channel.send = async (message) => { sent.push(message); return { id: "999999999999999999" }; };
+      channel.edit = async (options) => {
+        assert.equal(options.lockPermissions, false);
+        channel.parentId = options.parent; channel.name = options.name;
+        return channel;
+      };
+      channel.send = async (message) => {
+        sent.push(message);
+        return { id: "999999999999999999", edit: async (payload) => countdownEdits.push(payload.content) };
+      };
       channel.isTextBased = () => true;
       channel.permissionsFor = () => new PermissionsBitField(PermissionsBitField.Flags.ViewChannel);
       channel.permissionOverwrites = { edit: async (...args) => permissionEdits.push(args) };
@@ -223,10 +264,14 @@ test("opening uses atomic numbering without DM, then closing persists reason, tr
     return channel;
   };
   const client = { user: { id: botId }, guilds: { cache: new Collection([[guildId, guild]]) },
+    users: { fetch: async (id) => {
+      assert.equal(id, ownerId);
+      return { username: "Jogador", send: async (payload) => { directMessages.push(payload); return { id: "dm-review" }; } };
+    } },
     channels: { cache: channels, fetch: async (id) => channels.get(id) || null } };
   const replies = [];
   const opening = { customId: "ticket:category-modal:doubts", guildId, guild, client,
-    user: { id: ownerId, send: () => { throw new Error("Must never contact DM"); } },
+    user: { id: ownerId, username: "Jogador", send: () => { throw new Error("Must never contact DM"); } },
     fields: { getTextInputValue: (key) => key === "minecraftNick" ? "Lhama" : "Preciso de ajuda no servidor" },
     isStringSelectMenu: () => false, isButton: () => false, isUserSelectMenu: () => false, isModalSubmit: () => true,
     deferReply: async () => { opening.deferred = true; }, editReply: async (payload) => replies.push(payload),
@@ -234,21 +279,55 @@ test("opening uses atomic numbering without DM, then closing persists reason, tr
   await handleTicketInteraction(opening);
   assert.equal(increment.mock.callCount(), 1);
   assert.equal(stored.ownerId, ownerId);
-  assert.equal(channels.get(stored.channelId).name, "ticket-0052");
+  assert.equal(channels.get(stored.channelId).name, "duvidas-jogador");
   assert(stored.categoryId);
   assert(replies.at(-1).content.includes(`<#${stored.channelId}>`));
+  assert.equal(directMessages.length, 0);
   const userOverwrite = channels.get(stored.channelId).permissionOverwrites;
   assert(userOverwrite);
 
   t.mock.method(Ticket, "findOne", async () => stored);
   t.mock.method(Ticket, "findOneAndUpdate", async (query, update) => { Object.assign(stored, update.$set); return stored; });
+  const delay = t.mock.method(require("node:timers/promises"), "setTimeout", async (milliseconds) => {
+    assert.equal(milliseconds, 1000);
+    assert.equal(stored.status, "open");
+    assert(sent.some((payload) => payload.content === "## Este suporte será fechado em **10** segundos..."));
+  });
   guild.members.fetch = async () => ({ roles: { cache: new Collection([[staffId, {}]]) }, permissions: new PermissionsBitField() });
-  const closing = { ...opening, customId: `ticket:close-modal:${stored.ticketId}`, user: { id: staffId },
-    fields: { getTextInputValue: () => "Dúvida esclarecida" } };
+  const closing = { ...opening, customId: `ticket:close-confirm:${stored.ticketId}`, user: { id: staffId },
+    isModalSubmit: () => false, isButton: () => true, deferUpdate: async () => {} };
   await handleTicketInteraction(closing);
-  assert.equal(stored.status, "closed"); assert.equal(stored.closeReason, "Dúvida esclarecida");
+  assert.equal(delay.mock.callCount(), 10);
+  assert.deepEqual(countdownEdits, [
+    ...Array.from({ length: 9 }, (_, index) => {
+      const seconds = 9 - index;
+      return `## Este suporte será fechado em **${seconds}** ${seconds === 1 ? "segundo" : "segundos"}...`;
+    }),
+    "## Fechando este suporte...",
+  ]);
+  assert.equal(stored.status, "closed"); assert.equal(stored.closeReason, "Fechamento confirmado pela equipe.");
   assert.equal(stored.closedBy, staffId); assert(stored.finalizedAt);
-  assert(writes.some(({ content }) => content.includes("<!doctype html>") && content.includes("Dúvida esclarecida")));
+  assert(writes.some(({ content }) => content.includes("<!doctype html>") && content.includes("Fechamento confirmado pela equipe.")));
   assert(permissionEdits.some(([id, permissions]) => id === ownerId && permissions.SendMessages === false));
-  assert(sent.some((payload) => JSON.stringify(payload).includes("ticket:review:")));
+  assert(!sent.some((payload) => JSON.stringify(payload).includes("ticket:review:")));
+  assert(directMessages.some((payload) => JSON.stringify(payload).includes("ticket:review:")));
+  assert.equal(channels.get(stored.channelId).name, "closed-jogador");
+  assert.equal(stored.categoryId, config.tickets.closedCategoryId);
+  assert(channels.has(config.tickets.closedCategoryId));
+});
+
+test("review selection accepts the owner in DM and rejects another user", async (t) => {
+  t.mock.method(Ticket, "findOne", async () => ({ ...ticket, status: "closed" }));
+  t.mock.method(TicketReview, "exists", async () => false);
+  const { i, replies } = interaction("review");
+  i.guildId = null;
+  i.user = { id: ownerId };
+  i.isButton = () => false;
+  i.isStringSelectMenu = () => true;
+  i.values = ["5"];
+  await handleTicketInteraction(i);
+  assert.equal(replies[0].custom_id, `ticket:review-modal:${ticket.ticketId}:5`);
+  i.user = { id: staffId };
+  await handleTicketInteraction(i);
+  assert(replies.at(-1).content.includes("Somente quem abriu"));
 });

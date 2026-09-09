@@ -66,7 +66,15 @@ function buildTicketOverwrites(guild, categoryType, ownerId = "") {
   return overwrites;
 }
 
+function getTicketNotificationRoleIds(categoryType) {
+  const roles = categoryType === "coordination"
+    ? getVisibleStaffRoleIds(categoryType)
+    : config.tickets.supportRoles;
+  return unique(roles).filter((id) => id !== config.tickets.guildId);
+}
+
 module.exports = {
+  getTicketNotificationRoleIds,
   buildTicketOverwrites,
   getVisibleStaffRoleIds,
   hasAnyConfiguredRole,

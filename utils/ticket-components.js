@@ -14,6 +14,7 @@ const {
 } = require("discord.js");
 
 const config = require("../config");
+const { getTicketNotificationRoleIds } = require("./ticket-permissions");
 const {
   escapeDiscordText,
   formatDateTime,
@@ -234,6 +235,7 @@ function buildStaffChannelComponents(ticket) {
   const categoryName = categoryConfig.name || ticket.categoryType;
   const assignedStaff = ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Aguardando";
   const formLines = formDataToDisplayLines(ticket, categoryConfig);
+  const staffMentions = getTicketNotificationRoleIds(ticket.categoryType).map((id) => `<@&${id}>`).join(" ");
   const components = [
     buildSection(
       [
@@ -244,6 +246,7 @@ function buildStaffChannelComponents(ticket) {
     ),
     buildText(
       [
+        ...(staffMentions ? [`**Equipe:** ${staffMentions}`] : []),
         `**Responsavel:** ${assignedStaff}`,
         `**Aberto em:** ${formatDateTime(ticket.createdAt)}`,
         `**Nick:** ${escapeDiscordText(ticket.minecraftNick) || "Não informado"}`,
@@ -273,17 +276,30 @@ function buildStaffChannelComponents(ticket) {
 
 
 
+function getTicketManageOptions(ticket) {
+  const options = [
+    { label: "Adicionar usuário", value: "add-user", emoji: "➕" },
+    { label: "Remover usuário", value: "remove-user", emoji: "➖" },
+    { label: "Renomear", value: "rename", emoji: "📝" },
+    { label: "Transferir", value: "transfer", emoji: "🔄" },
+    { label: "Chamar usuário", value: "call-user", emoji: "🔔" },
+    { label: "Transcript", value: "transcript", emoji: "📄" },
+    ticket.status === "paused"
+      ? { label: "Retomar", value: "resume", emoji: "▶️" }
+      : { label: "Pausar", value: "pause", emoji: "⏸️" },
+  ];
+  return ["closed", "legacy_closed"].includes(ticket.status)
+    ? options.filter((option) => option.value === "transcript")
+    : options;
+}
+
 function buildTicketManageComponents(ticket) {
-  const disabled = ticket.status === "closed" || ticket.status === "legacy_closed";
-  const pauseButton = ticket.status === "paused"
-    ? new ButtonBuilder()
-        .setCustomId(`${TICKET_CUSTOM_IDS.resumePrefix}:${ticket.ticketId}`)
-        .setLabel("Retomar")
-        .setStyle(ButtonStyle.Success)
-    : new ButtonBuilder()
-        .setCustomId(`${TICKET_CUSTOM_IDS.pausePrefix}:${ticket.ticketId}`)
-        .setLabel("Pausar")
-        .setStyle(ButtonStyle.Secondary);
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`ticket:manage-select:${ticket.ticketId}`)
+    .setPlaceholder("Selecione uma ação")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(getTicketManageOptions(ticket));
 
   const container = new ContainerBuilder({
     components: [
@@ -295,30 +311,7 @@ function buildTicketManageComponents(ticket) {
         buildDisabledBadge(`ticket:badge:${ticket.ticketId}:staff`, "Equipe"),
       ),
       buildText("Escolha a acao para este atendimento."),
-      new ActionRowBuilder().addComponents(
-        ...[["add-user", "➕ Adicionar usuário"], ["remove-user", "➖ Remover usuário"], ["rename", "📝 Renomear"]]
-          .map(([action, label]) => new ButtonBuilder().setCustomId(`ticket:${action}:${ticket.ticketId}`)
-            .setLabel(label).setStyle(ButtonStyle.Secondary).setDisabled(disabled)),
-      ).toJSON(),
-      new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId(`${TICKET_CUSTOM_IDS.transferPrefix}:${ticket.ticketId}`)
-            .setLabel("🔄 Transferir")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(disabled),
-          new ButtonBuilder()
-            .setCustomId(`${TICKET_CUSTOM_IDS.callUserPrefix}:${ticket.ticketId}`)
-            .setLabel("🔔 Chamar usuário")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(disabled),
-          new ButtonBuilder()
-            .setCustomId(`${TICKET_CUSTOM_IDS.transcriptPrefix}:${ticket.ticketId}`)
-            .setLabel("Transcript")
-            .setStyle(ButtonStyle.Secondary),
-          pauseButton.setDisabled(disabled),
-        )
-        .toJSON(),
+      new ActionRowBuilder().addComponents(select).toJSON(),
     ],
   });
 
@@ -468,18 +461,18 @@ function buildTicketReviewComponents({ ticket, rating, userId, userAvatarUrl, co
   const ratingNumber = Number.parseInt(rating, 10);
   const safeRating = Number.isFinite(ratingNumber) ? Math.min(5, Math.max(1, ratingNumber)) : 1;
   const reviewerThumbnail = buildThumbnail(userAvatarUrl, "Avatar de quem abriu o ticket");
+  const summary = [
+    "### Nova avaliação de ticket",
+    [
+      `**Nota:** ${safeRating}/5`,
+      `**Usuário:** <@${userId}>`,
+      `**Atendente:** ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Não informado"}`,
+    ].join("\n"),
+  ];
   const components = [
     reviewerThumbnail
-      ? buildSection(["# Nova avaliacao de ticket"], reviewerThumbnail)
-      : buildText("# Nova avaliacao de ticket"),
-    buildSeparator(),
-    buildText(
-      [
-        `**Nota:** ${safeRating}/5`,
-        `**Usuario:** <@${userId}>`,
-        `**Atendente:** ${ticket.assignedStaffId ? `<@${ticket.assignedStaffId}>` : "Nao informado"}`,
-      ].join("\n"),
-    ),
+      ? buildSection(summary, reviewerThumbnail)
+      : buildText(summary.join("\n")),
   ];
 
   const safeComment = escapeDiscordText(comment);
@@ -541,16 +534,21 @@ function buildReviewModal(ticketId, rating) {
     );
 }
 
-function buildUserSelectRow(customId, placeholder) {
-  return new ActionRowBuilder()
+function buildUserSelectModal(customId, title, placeholder) {
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title)
     .addComponents(
-      new UserSelectMenuBuilder()
-        .setCustomId(customId)
-        .setPlaceholder(placeholder)
-        .setMinValues(1)
-        .setMaxValues(1),
-    )
-    .toJSON();
+      new LabelBuilder()
+        .setLabel(placeholder)
+        .setUserSelectMenuComponent(
+          new UserSelectMenuBuilder()
+            .setCustomId("target-user")
+            .setPlaceholder("Selecione o usuário")
+            .setMinValues(1)
+            .setMaxValues(1),
+        ),
+    );
 }
 
 function buildTicketActionModal(ticketId, action, title, label, maxLength) {
@@ -560,6 +558,7 @@ function buildTicketActionModal(ticketId, action, title, label, maxLength) {
 }
 
 module.exports = {
+  getTicketManageOptions,
   buildTicketActionModal,
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
@@ -572,6 +571,6 @@ module.exports = {
   buildTicketClosedComponents,
   buildTicketManageComponents,
   buildTicketReviewComponents,
-  buildUserSelectRow,
+  buildUserSelectModal,
   getStatusLabel,
 };
