@@ -162,7 +162,7 @@ const config = {
   },
   tickets: {
     enabled: parseBoolean(process.env.TICKETS_ENABLED, true),
-    guildId: "1541296952514187397",
+    guildId: "1403151699279089664",
     dataDir: ticketDataDir,
     panelMessageFilePath: resolveLocalPath(
       process.env.TICKET_PANEL_MESSAGE_FILE,
