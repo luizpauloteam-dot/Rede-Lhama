@@ -551,6 +551,19 @@ function buildUserSelectModal(customId, title, placeholder) {
     );
 }
 
+function buildTicketCallComponents(ticket) {
+  return [new ContainerBuilder({ components: [
+    buildText("## A equipe aguarda seu retorno"),
+    buildText(`<@${ticket.ownerId}>, precisamos da sua resposta no ticket **#${formatTicketNumber(ticket.ticketNumber)}**.\nClique no botão abaixo para continuar o atendimento.`),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Ir para o ticket")
+        .setStyle(ButtonStyle.Link)
+        .setURL(`https://discord.com/channels/${ticket.guildId}/${ticket.channelId}`),
+    ).toJSON(),
+  ] }).toJSON()];
+}
+
 function buildTicketActionModal(ticketId, action, title, label, maxLength) {
   return new ModalBuilder().setCustomId(`ticket:${action}-modal:${ticketId}`).setTitle(title)
     .addComponents(buildLabelTextInput({ id: "value", label, maxLength, minLength: 1,
@@ -560,6 +573,7 @@ function buildTicketActionModal(ticketId, action, title, label, maxLength) {
 module.exports = {
   getTicketManageOptions,
   buildTicketActionModal,
+  buildTicketCallComponents,
   TICKET_CUSTOM_IDS,
   buildCategoryModal,
   buildCloseConfirmComponents,

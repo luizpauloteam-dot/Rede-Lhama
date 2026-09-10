@@ -331,3 +331,91 @@ test("review selection accepts the owner in DM and rejects another user", async 
   await handleTicketInteraction(i);
   assert(replies.at(-1).content.includes("Somente quem abriu"));
 });
+
+function callUserFixture(t) {
+  t.mock.property(config.tickets, "supportRoles", [staffId]);
+  t.mock.property(config.tickets, "logChannelId", "");
+  const stored = { ...ticket, lastCallAt: null };
+  const directMessages = [];
+  const logs = [];
+  t.mock.method(Ticket, "findOne", async () => ({ ...stored }));
+  const reserve = t.mock.method(Ticket, "findOneAndUpdate", async (query, update) => {
+    if (stored.lastCallAt && stored.lastCallAt > query.$or[2].lastCallAt.$lte) return null;
+    Object.assign(stored, update.$set);
+    return { ...stored };
+  });
+  const rollback = t.mock.method(Ticket, "updateOne", async (query, update) => {
+    assert.equal(query.lastCallAt, stored.lastCallAt);
+    Object.assign(stored, update.$set);
+    return { modifiedCount: 1 };
+  });
+  t.mock.method(TicketLog, "create", async (payload) => logs.push(payload));
+  const staff = { roles: { cache: new Collection([[staffId, {}]]) }, permissions: new PermissionsBitField() };
+  const { i, replies } = interaction("call-user", staff);
+  i.deferReply = async ({ flags }) => {
+    assert.equal(flags, 64);
+    i.deferred = true;
+  };
+  i.editReply = async (payload) => replies.push(payload);
+  i.client.channels.cache.set(ticket.channelId, {
+    guildId, isTextBased: () => true,
+    permissionsFor: () => new PermissionsBitField(PermissionsBitField.Flags.ViewChannel),
+    send: async () => assert.fail("The call notification must only be sent to the ticket owner's DM"),
+  });
+  const owner = { send: async (payload) => { directMessages.push(payload); return { id: "call-dm" }; } };
+  const fetchOwner = t.mock.fn(async (id) => { assert.equal(id, ownerId); return owner; });
+  i.client.users = { fetch: fetchOwner };
+  return { i, replies, stored, directMessages, logs, reserve, rollback, owner, fetchOwner };
+}
+
+test("calling the owner sends a DM panel with a direct ticket link and enforces cooldown", async (t) => {
+  const f = callUserFixture(t);
+  await handleTicketInteraction(f.i);
+  assert.equal(f.directMessages.length, 1);
+  const payload = f.directMessages[0];
+  assert.equal(payload.flags, 32768);
+  assert.deepEqual(payload.allowedMentions, { parse: [], users: [ownerId] });
+  const container = payload.components[0];
+  assert.equal(container.type, 17);
+  assert.match(container.components[0].content, /A equipe aguarda seu retorno/);
+  const button = container.components[2].components[0];
+  assert.equal(button.style, 5);
+  assert.equal(button.label, "Ir para o ticket");
+  assert.equal(button.url, `https://discord.com/channels/${guildId}/${ticket.channelId}`);
+  assert.match(f.replies[0].content, /Chamada enviada na DM/);
+  assert.equal(f.logs[0].metadata.delivered, true);
+  assert.equal(f.logs[0].metadata.destination, "dm");
+  assert.equal(f.rollback.mock.callCount(), 0);
+  await handleTicketInteraction(f.i);
+  assert.equal(f.directMessages.length, 1);
+  assert.match(f.replies.at(-1).content, /cooldown/);
+});
+
+test("a blocked DM informs staff, records failure and releases the cooldown for retry", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const f = callUserFixture(t);
+  f.owner.send = async () => { throw Object.assign(new Error("Cannot send messages to this user"), { code: 50007 }); };
+  await handleTicketInteraction(f.i);
+  assert.equal(f.rollback.mock.callCount(), 1);
+  assert.equal(f.stored.lastCallAt, null);
+  assert.equal(f.logs[0].metadata.delivered, false);
+  assert.equal(f.logs[0].metadata.errorCode, 50007);
+  assert.match(f.replies[0].content, /DM do jogador está bloqueada/);
+  f.owner.send = async (payload) => { f.directMessages.push(payload); return { id: "retry-dm" }; };
+  await handleTicketInteraction(f.i);
+  assert.equal(f.directMessages.length, 1);
+  assert.match(f.replies.at(-1).content, /Chamada enviada na DM/);
+});
+
+test("closed tickets and unauthorized callers never send a DM or reserve cooldown", async (t) => {
+  const f = callUserFixture(t);
+  f.stored.status = "closed";
+  await handleTicketInteraction(f.i);
+  assert.match(f.replies.at(-1).content, /ticket está fechado/);
+  f.stored.status = "open";
+  f.i.guild.members.fetch = async () => ({ roles: { cache: new Collection() }, permissions: new PermissionsBitField() });
+  await handleTicketInteraction(f.i);
+  assert.match(f.replies.at(-1).content, /permissao/);
+  assert.equal(f.reserve.mock.callCount(), 0);
+  assert.equal(f.fetchOwner.mock.callCount(), 0);
+});

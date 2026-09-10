@@ -17,6 +17,26 @@ npm install
 npm start
 ```
 
+## Alteração de equipe
+
+Use `/equipe tipo:entrar` para entrar, promover ou rebaixar, e `/equipe tipo:remover` para retirar um cargo da equipe. O modal contém seleção de um membro, seleção de um cargo principal e upload obrigatório de uma foto PNG, JPG, WEBP ou GIF.
+
+O menu lista somente os cargos encontrados no servidor, nesta ordem do maior para o menor: **Fundadores → Coordenador → Desenvolvedor → Administrador → Moderador → Ajudante → Aprendiz → Construtor → Designer**. A ordem vem de `config.team.rankNames`; a hierarquia do Discord continua sendo validada separadamente para autorizar a alteração. O cargo **Team** é a base e não aparece no menu.
+
+Ao entrar, quem não tem cargo principal recebe o selecionado e `Team`. Quem já tem um cargo principal tem seus cargos principais anteriores substituídos pelo selecionado: subir nessa lista gera promoção; descer gera rebaixamento. Se houver mais de um cargo principal antigo, o maior define a comparação. Selecionar um cargo que o membro já possui não faz alteração. Ao remover, o bot retira o cargo selecionado e também `Team` se não restar nenhum cargo principal. Cargos fora da equipe são preservados.
+
+O aviso mantém faixa laranja, título “• Alteração na Equipe” e foto como miniatura à direita. Na entrada: “@membro agora exerce o cargo de @Cargo na equipe.” Na remoção: “@membro deixou de exercer o cargo de @Cargo na equipe.” Nas trocas: “@membro recebeu uma **promoção** de @CargoAnterior para @NovoCargo na equipe.” ou “@membro recebeu um **rebaixamento** de @CargoAnterior para @NovoCargo na equipe.” A mensagem permite notificações somente para o membro e os cargos mencionados; a notificação do cargo depende de ele ser mencionável ou da permissão do bot para mencionar cargos. O responsável continua identificado no motivo da alteração no log de auditoria do Discord.
+
+Os cargos são reconhecidos pelo nome exato, ignorando maiúsculas e minúsculas. Para nomes diferentes ou duplicados, configure os IDs em `DISCORD_TEAM_ROLE_MAP`, por exemplo `ajudante:ID_DO_AJUDANTE,team:ID_DO_TEAM`. Um ID configurado que não existe, nomes duplicados sem ID ou a ausência do cargo base bloqueiam o fluxo com uma mensagem explicativa. O bot não cria cargos automaticamente.
+
+Os avisos são publicados no canal `1546592495503282186`. Para alterar o destino, configure `DISCORD_TEAM_LOG_CHANNEL_ID`. Configure `DISCORD_TEAM_TITLE_EMOJI` com o emoji da logo (`<:nome:ID>`) para exibi-lo antes do título. `DISCORD_TEAM_COLOR` controla a faixa lateral (padrão `E8A64A`).
+
+Quem executa precisa de **Gerenciar cargos**. Todos os cargos que serão adicionados ou removidos e o membro selecionado precisam estar abaixo do responsável e do bot na hierarquia (o dono do servidor não tem a restrição de hierarquia do responsável). Cargos de integrações, `@everyone`, bots e o dono do servidor não são alvos válidos. A validação acontece novamente ao enviar.
+
+O bot precisa de **Gerenciar cargos**, acesso ao canal do registro, **Enviar mensagens** (ou **Enviar mensagens em tópicos**), **Anexar arquivos** e **Inserir links**. Se o cargo for alterado e a publicação falhar, a resposta informa a falha parcial para a administração registrar manualmente.
+
+Reinicie o bot para registrar o comando. Validação local: `npm run check` e `npm test`.
+
 ## Discloud
 
 O `discloud.config` esta configurado para hospedar o bot Node.js como `TYPE=bot`.
@@ -137,7 +157,7 @@ DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
 
 O bot precisa de Gerenciar canais, Gerenciar cargos (para sobrescritas), Ver canais, Enviar mensagens, Anexar arquivos e Ler histórico. Configure os cargos de atendimento explicitamente. A Coordenação não concede acesso aos cargos de suporte comum. Administrador do Discord sempre ignora restrições de canal. Logs e transcripts de Coordenação ficam no MongoDB/disco, sem publicação nos canais gerais; a equipe autorizada pode baixar o HTML pela ação Transcript.
 
-Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar no canal, renomear, fechar e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento bloqueia mensagens dos participantes, gera HTML e move o canal para a categoria protegida `1541646616778514512`, com nome `closed-usuario`, preservando as permissões. A mensagem de finalização com avaliação de 1 a 5 é enviada por DM ao titular e pode ser respondida mesmo após excluir o canal, enquanto o registro existir. Se a DM estiver bloqueada, o fechamento continua e a equipe recebe um aviso. A reabertura retorna o canal à categoria automática e ao nome `tipo-usuario` correspondente.
+Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar por DM com botão para abrir o ticket, renomear, fechar e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento bloqueia mensagens dos participantes, gera HTML e move o canal para a categoria protegida `1541646616778514512`, com nome `closed-usuario`, preservando as permissões. A mensagem de finalização com avaliação de 1 a 5 é enviada por DM ao titular e pode ser respondida mesmo após excluir o canal, enquanto o registro existir. Se a DM estiver bloqueada, o fechamento continua e a equipe recebe um aviso. A reabertura retorna o canal à categoria automática e ao nome `tipo-usuario` correspondente.
 
 O transcript consulta todo o histórico disponível no Discord, incluindo anexos, imagens, avatares e datas. É salvo em `data/tickets/transcripts` (ou `TICKET_DATA_DIR/transcripts`) antes de qualquer exclusão pelo bot. Mensagens apagadas diretamente no Discord antes da geração não podem ser recuperadas. Mantenha backup desse diretório. `/ticket transcript` também entrega o arquivo ao atendente. O contador usa incremento atômico no MongoDB e não é apagado pela limpeza de registros.
 
@@ -172,3 +192,5 @@ Discord Developer Portal > Bot > Privileged Gateway Intents > Message Content In
 - `Handler/commands.js`: carrega comandos slash da pasta `Commands`.
 - `Handler/events.js`: carrega eventos da pasta `Events`.
 - `utils/`: utilitarios compartilhados da base.
+
+A ação **Chamar usuário** envia ao titular uma DM com um painel e o botão **Ir para o ticket**. A equipe recebe a confirmação em resposta privada. Se a DM estiver indisponível ou o envio falhar, a equipe é informada e o cooldown dessa tentativa é liberado.

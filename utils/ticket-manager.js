@@ -30,6 +30,7 @@ const {
   buildStaffChannelComponents,
   buildSupportPanelComponents,
   buildTicketArchivedComponents,
+  buildTicketCallComponents,
   buildTicketClosedComponents,
   buildTicketManageComponents,
   getTicketManageOptions,
@@ -1008,12 +1009,20 @@ async function handleTransferSelect(interaction, ticketId, targetId = interactio
 }
 
 async function handleCallUser(interaction, ticketId) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
   const ticket = await requireTicketForInteraction(interaction, ticketId);
   if (!ticket || !(await requireStaff(interaction, ticket))) {
     return true;
   }
 
-  const cooldownLimit = new Date(Date.now() - config.tickets.callCooldownMs);
+  if (!ACTIVE_TICKET_STATUSES.includes(ticket.status)) {
+    return replyEphemeral(interaction, "Este ticket está fechado.");
+  }
+  const callAt = new Date();
+  const previousCallAt = ticket.lastCallAt || null;
+  const cooldownLimit = new Date(callAt.getTime() - config.tickets.callCooldownMs);
   const updatedTicket = await Ticket.findOneAndUpdate(
     buildTicketScopeQuery({
       ticketId,
@@ -1028,7 +1037,7 @@ async function handleCallUser(interaction, ticketId) {
     }),
     {
       $set: {
-        lastCallAt: new Date(),
+        lastCallAt: callAt,
       },
     },
     { new: true },
@@ -1039,9 +1048,24 @@ async function handleCallUser(interaction, ticketId) {
     return true;
   }
 
-  const channel = await fetchStaffChannel(interaction.client, ticket);
-  const notification = await channel.send({ content: `<@${ticket.ownerId}>, a equipe aguarda seu retorno.`,
-    allowedMentions: { parse: [], users: [ticket.ownerId] } });
+  let notification = null;
+  let deliveryError = null;
+  try {
+    const owner = await interaction.client.users.fetch(ticket.ownerId);
+    notification = await owner.send({
+      flags: MessageFlags.IsComponentsV2,
+      components: buildTicketCallComponents(updatedTicket),
+      allowedMentions: { parse: [], users: [ticket.ownerId] },
+    });
+  } catch (error) {
+    deliveryError = error;
+    log.warn(`Não foi possível enviar a chamada do ticket ${ticketId} por DM.`, error);
+    // Release only this reservation so a failed DM does not consume the cooldown.
+    await Ticket.updateOne(
+      buildTicketScopeQuery({ ticketId, lastCallAt: callAt }),
+      { $set: { lastCallAt: previousCallAt } },
+    );
+  }
 
   await logTicketAction(interaction.client, {
     ticket: updatedTicket,
@@ -1050,9 +1074,15 @@ async function handleCallUser(interaction, ticketId) {
     targetId: ticket.ownerId,
     metadata: {
       delivered: Boolean(notification),
+      destination: "dm",
+      errorCode: deliveryError?.code,
     },
   });
-  await replyEphemeral(interaction, "Jogador chamado no canal do ticket.");
+  await replyEphemeral(interaction, notification
+    ? "Chamada enviada na DM do jogador com o botão para abrir o ticket."
+    : deliveryError?.code === 50007
+      ? "Não consegui enviar a chamada: a DM do jogador está bloqueada ou indisponível. Peça para ele permitir mensagens diretas e tente novamente."
+      : "Não consegui enviar a chamada por DM. Tente novamente em instantes.");
   return true;
 }
 

@@ -150,6 +150,14 @@ const config = {
       manutencao: defaultStatusImages.manutencao,
     },
   },
+  team: {
+    rankNames: ["Fundadores", "Coordenador", "Desenvolvedor", "Administrador", "Moderador", "Ajudante", "Aprendiz", "Construtor", "Designer"],
+    baseRoleName: "Team",
+    roleIds: parseRoleMap(process.env.DISCORD_TEAM_ROLE_MAP),
+    logChannelId: String(process.env.DISCORD_TEAM_LOG_CHANNEL_ID || "1546592495503282186").trim(),
+    titleEmoji: String(process.env.DISCORD_TEAM_TITLE_EMOJI || "<:lhamalogo:1542667514545442826>").trim(),
+    color: normalizeColor(process.env.DISCORD_TEAM_COLOR, "E8A64A"),
+  },
   suggestions: {
     enabled: true,
     dataDir: suggestionDataDir,
