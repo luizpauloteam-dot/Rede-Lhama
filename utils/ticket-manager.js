@@ -1,5 +1,3 @@
-const fs = require("fs").promises;
-const path = require("path");
 const timers = require("node:timers/promises");
 
 const {
@@ -10,6 +8,7 @@ const {
 
 const config = require("../config");
 const { createLogger } = require("./logger");
+const { readPanelState, upsertPanelMessage } = require("./panel-message");
 const {
   ACTIVE_TICKET_STATUSES,
   TICKET_SYSTEM_VERSION,
@@ -82,29 +81,6 @@ const TICKET_DATABASE_CLEAR_SCOPES = {
   USER: "usuario",
   ALL: "todos",
 };
-
-async function ensureParentDir(filePath) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-}
-
-async function readPanelState() {
-  try {
-    const content = await fs.readFile(config.tickets.panelMessageFilePath, "utf8");
-    return JSON.parse(content);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-
-    log.warn("Nao foi possivel ler o estado do painel de tickets.", error);
-    return null;
-  }
-}
-
-async function writePanelState(state) {
-  await ensureParentDir(config.tickets.panelMessageFilePath);
-  await fs.writeFile(config.tickets.panelMessageFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-}
 
 async function replyEphemeral(interaction, content, extraPayload = {}) {
   const payload = {
@@ -465,7 +441,7 @@ async function fetchPanelChannel(client, preferredChannel = null) {
     return preferredChannel;
   }
 
-  const channelId = config.tickets.panelChannelId || (await readPanelState())?.channelId;
+  const channelId = config.tickets.panelChannelId || (await readPanelState(config.tickets.panelMessageFilePath))?.channelId;
   if (!channelId) {
     return null;
   }
@@ -482,20 +458,6 @@ async function fetchPanelChannel(client, preferredChannel = null) {
   return channel;
 }
 
-async function fetchStoredPanelMessage(channel, client) {
-  const state = await readPanelState();
-  if (!state?.messageId || state.channelId !== channel.id) {
-    return null;
-  }
-
-  const message = await channel.messages.fetch(state.messageId).catch(() => null);
-  if (!message || message.author?.id !== client.user.id) {
-    return null;
-  }
-
-  return message;
-}
-
 async function upsertSupportPanel(client, preferredChannel = null) {
   if (!config.tickets.enabled) {
     return null;
@@ -508,36 +470,11 @@ async function upsertSupportPanel(client, preferredChannel = null) {
 
   const openTicketCount = await getOpenTicketCount();
   const components = buildSupportPanelComponents({ openTicketCount });
-  const existingMessage = await fetchStoredPanelMessage(channel, client);
-
-  if (existingMessage) {
-    await existingMessage
-      .edit({
-        content: null,
-        flags: MessageFlags.IsComponentsV2,
-        components,
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .catch(async (error) => {
-        log.warn("Nao foi possivel atualizar o painel de tickets salvo. Vou enviar um novo.", error);
-        const message = await channel.send({
-          flags: MessageFlags.IsComponentsV2,
-          components,
-          allowedMentions: SAFE_ALLOWED_MENTIONS,
-        });
-        await writePanelState({ channelId: channel.id, messageId: message.id });
-      });
-
-    return existingMessage;
-  }
-
-  const message = await channel.send({
-    flags: MessageFlags.IsComponentsV2,
-    components,
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
+  const message = await upsertPanelMessage({
+    client, channel, components,
+    customId: TICKET_CUSTOM_IDS.panelSelect,
+    stateFilePath: config.tickets.panelMessageFilePath,
   });
-  await writePanelState({ channelId: channel.id, messageId: message.id });
-  log.info(`Painel de tickets enviado em ${channel.id}.`);
   return message;
 }
 

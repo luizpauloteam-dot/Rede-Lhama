@@ -1,48 +1,20 @@
 const fs = require("fs").promises;
-const path = require("path");
 
 const {
   Events,
-  MessageFlags,
 } = require("discord.js");
 
 const config = require("../config");
-const { buildStatusComponents } = require("../utils/status-panel");
+const { buildStatusComponents, STATUS_PLAYERS_CUSTOM_ID } = require("../utils/status-panel");
 const { createLogger } = require("../utils/logger");
+const { upsertPanelMessage } = require("../utils/panel-message");
 
 const log = createLogger("status-panel");
-const SAFE_ALLOWED_MENTIONS = {
-  parse: [],
-  repliedUser: false,
-};
 
 let refreshTimer = null;
 let isRefreshing = false;
 let lastStatusSignature = "";
 let lastStatusFileErrorMessage = "";
-
-async function ensureParentDir(filePath) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-}
-
-async function readStatusState() {
-  try {
-    const content = await fs.readFile(config.status.panelMessageFilePath, "utf8");
-    return JSON.parse(content);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-
-    log.warn("Não foi possível ler o estado do painel de status.", error);
-    return null;
-  }
-}
-
-async function writeStatusState(state) {
-  await ensureParentDir(config.status.panelMessageFilePath);
-  await fs.writeFile(config.status.panelMessageFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-}
 
 async function resolveStatusChannel(client) {
   if (!config.status.channelId) {
@@ -60,20 +32,6 @@ async function resolveStatusChannel(client) {
   }
 
   return channel;
-}
-
-async function fetchStoredStatusMessage(channel, client) {
-  const state = await readStatusState();
-  if (!state?.messageId || state.channelId !== channel.id) {
-    return null;
-  }
-
-  const message = await channel.messages.fetch(state.messageId).catch(() => null);
-  if (!message || message.author?.id !== client.user.id) {
-    return null;
-  }
-
-  return message;
 }
 
 function formatErrorMessage(error) {
@@ -196,14 +154,6 @@ function logStatusChange(serverStatus) {
   log.info(`Status automático atualizado: ${serverStatus.players}/${serverStatus.maxPlayers} jogadores online.`);
 }
 
-async function sendStatusMessage(channel, components) {
-  return channel.send({
-    flags: MessageFlags.IsComponentsV2,
-    components,
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
-  });
-}
-
 async function upsertStatusPanel(client) {
   if (isRefreshing) {
     return;
@@ -218,24 +168,8 @@ async function upsertStatusPanel(client) {
 
     const serverStatus = await fetchServerStatus();
     const components = buildStatusComponents(serverStatus);
-    const existingMessage = await fetchStoredStatusMessage(channel, client);
-
-    if (existingMessage) {
-      await existingMessage
-        .edit({
-          components,
-          allowedMentions: SAFE_ALLOWED_MENTIONS,
-        })
-        .catch(async (error) => {
-          log.warn("Não foi possível atualizar o painel de status salvo. Vou enviar um novo.", error);
-          const message = await sendStatusMessage(channel, components);
-          await writeStatusState({ channelId: channel.id, messageId: message.id });
-        });
-    } else {
-      const message = await sendStatusMessage(channel, components);
-      await writeStatusState({ channelId: channel.id, messageId: message.id });
-      log.info(`Painel de status enviado em ${channel.id}.`);
-    }
+    await upsertPanelMessage({ client, channel, components,
+      customId: STATUS_PLAYERS_CUSTOM_ID, stateFilePath: config.status.panelMessageFilePath });
 
     logStatusChange(serverStatus);
   } finally {
@@ -248,7 +182,7 @@ async function startStatusPanel(client) {
     clearInterval(refreshTimer);
   }
 
-  await upsertStatusPanel(client);
+  await upsertStatusPanel(client).catch((error) => log.error("Falha ao sincronizar painel de status.", error));
 
   refreshTimer = setInterval(() => {
     upsertStatusPanel(client).catch((error) => {

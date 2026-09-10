@@ -55,6 +55,14 @@ Use `DISCORD_COMMAND_SCOPE=guild` para os comandos aparecerem quase imediatament
 
 Importante: os arquivos locais do Minecraft, como `pending-codes.txt`, `linked-accounts.txt` e `server-status.json`, ficam no PC/servidor onde o Paper roda. Se o bot rodar na Discloud, ele nao consegue ler caminhos locais como `C:/Minecraft-Server/...`. Nesse caso, mantenha o bot na mesma maquina do servidor Minecraft ou use uma ponte por API/webhook.
 
+## Painéis após reiniciar ou atualizar o bot
+
+Os painéis de vinculação, status, tickets e sugestões reutilizam suas mensagens existentes. O bot consulta o ID salvo e, se ele estiver ausente, inválido ou apontar para uma mensagem apagada, procura no histórico do canal uma mensagem do próprio bot com o componente específico daquele painel. A busca percorre também mensagens antigas, além das 100 mais recentes.
+
+O bot precisa de **Ver canal** e **Ler histórico de mensagens** nos canais dos painéis. Falhas de acesso, leitura ou edição são registradas e não provocam nova publicação. Um painel novo só é enviado após confirmar que nenhum correspondente existe no canal. Os IDs recuperados são salvos novamente; chamadas simultâneas do mesmo painel são processadas em sequência.
+
+Mantenha os canais configurados nas variáveis de ambiente da hospedagem, principalmente `DISCORD_TICKET_PANEL_CHANNEL_ID`, para o bot saber onde procurar se os arquivos locais forem substituídos no deploy. Para um painel de tickets publicado por comando sem canal configurado, executar `/ticket painel` no canal original também recupera a mensagem existente. Cópias antigas já duplicadas não são apagadas automaticamente.
+
 ## Painel de vinculacao
 
 O bot publica automaticamente um painel com Components v2 no canal configurado em `DISCORD_LINK_PANEL_CHANNEL_ID`.

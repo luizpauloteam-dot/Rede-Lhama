@@ -8,6 +8,7 @@ const {
 
 const config = require("../config");
 const { createLogger } = require("./logger");
+const { readPanelState, upsertPanelMessage } = require("./panel-message");
 const {
   SUGGESTION_CUSTOM_IDS,
   buildApprovedSuggestionComponents,
@@ -27,25 +28,6 @@ const SAFE_ALLOWED_MENTIONS = {
 
 async function ensureParentDir(filePath) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-}
-
-async function readPanelState() {
-  try {
-    const content = await fs.readFile(config.suggestions.panelMessageFilePath, "utf8");
-    return JSON.parse(content);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-
-    log.warn("Não foi possível ler o estado do painel de sugestões.", error);
-    return null;
-  }
-}
-
-async function writePanelState(state) {
-  await ensureParentDir(config.suggestions.panelMessageFilePath);
-  await fs.writeFile(config.suggestions.panelMessageFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 function createEmptySuggestionStore() {
@@ -101,27 +83,6 @@ async function resolvePanelChannel(client, preferredChannel = null) {
   return channel;
 }
 
-async function fetchStoredPanelMessage(channel, client, state) {
-  if (!state?.messageId || state.channelId !== channel.id) {
-    return null;
-  }
-
-  const message = await channel.messages.fetch(state.messageId).catch(() => null);
-  if (!message || message.author?.id !== client.user.id) {
-    return null;
-  }
-
-  return message;
-}
-
-async function sendPanelMessage(channel, components) {
-  return channel.send({
-    flags: MessageFlags.IsComponentsV2,
-    components,
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
-  });
-}
-
 async function upsertSuggestionPanel(client, preferredChannel = null, suggestionChannel = null) {
   if (!config.suggestions.enabled) {
     return null;
@@ -132,38 +93,19 @@ async function upsertSuggestionPanel(client, preferredChannel = null, suggestion
     return null;
   }
 
-  const state = await readPanelState();
+  const state = await readPanelState(config.suggestions.panelMessageFilePath);
   const components = buildSuggestionPanelComponents();
   const suggestionChannelId =
     suggestionChannel?.id ||
     config.suggestions.channelId ||
     state?.suggestionChannelId ||
     panelChannel.id;
-  const existingMessage = await fetchStoredPanelMessage(panelChannel, client, state);
-
-  if (existingMessage) {
-    await existingMessage.edit({
-      content: null,
-      flags: MessageFlags.IsComponentsV2,
-      components,
-      allowedMentions: SAFE_ALLOWED_MENTIONS,
-    });
-
-    await writePanelState({
-      channelId: panelChannel.id,
-      messageId: existingMessage.id,
-      suggestionChannelId,
-    });
-    return existingMessage;
-  }
-
-  const message = await sendPanelMessage(panelChannel, components);
-  await writePanelState({
-    channelId: panelChannel.id,
-    messageId: message.id,
-    suggestionChannelId,
+  return upsertPanelMessage({
+    client, channel: panelChannel, components,
+    customId: SUGGESTION_CUSTOM_IDS.openButton,
+    stateFilePath: config.suggestions.panelMessageFilePath,
+    extraState: { suggestionChannelId },
   });
-  return message;
 }
 
 async function replyEphemeral(interaction, content) {
@@ -279,7 +221,7 @@ async function createSuggestionThread(message, suggestion) {
 }
 
 async function resolveSuggestionTargetChannel(interaction) {
-  const state = await readPanelState();
+  const state = await readPanelState(config.suggestions.panelMessageFilePath);
   const channelId = config.suggestions.channelId || state?.suggestionChannelId;
   const configuredChannel = await resolveChannel(interaction.client, channelId);
 

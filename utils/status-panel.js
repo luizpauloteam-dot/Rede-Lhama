@@ -5,6 +5,7 @@ const {
 } = require("discord.js");
 
 const config = require("../config");
+const STATUS_PLAYERS_CUSTOM_ID = "status_players";
 
 function escapeDiscordText(value) {
   return String(value || "")
@@ -83,7 +84,7 @@ function buildStatusComponents(serverStatus) {
         accessory: {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          custom_id: "status_players",
+          custom_id: STATUS_PLAYERS_CUSTOM_ID,
           label: getPlayerLabel(serverStatus),
           disabled: true,
         },
@@ -111,5 +112,6 @@ function buildStatusComponents(serverStatus) {
 }
 
 module.exports = {
+  STATUS_PLAYERS_CUSTOM_ID,
   buildStatusComponents,
 };

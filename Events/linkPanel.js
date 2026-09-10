@@ -1,6 +1,3 @@
-const fs = require("fs").promises;
-const path = require("path");
-
 const {
   Events,
   MessageFlags,
@@ -21,35 +18,13 @@ const {
   buildSuccessMessage,
 } = require("../utils/link-roles");
 const { createLogger } = require("../utils/logger");
+const { upsertPanelMessage } = require("../utils/panel-message");
 
 const log = createLogger("link-panel");
 const SAFE_ALLOWED_MENTIONS = {
   parse: [],
   repliedUser: false,
 };
-
-async function ensureParentDir(filePath) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-}
-
-async function readPanelState() {
-  try {
-    const content = await fs.readFile(config.link.panelMessageFilePath, "utf8");
-    return JSON.parse(content);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-
-    log.warn("Não foi possível ler o estado do painel.", error);
-    return null;
-  }
-}
-
-async function writePanelState(state) {
-  await ensureParentDir(config.link.panelMessageFilePath);
-  await fs.writeFile(config.link.panelMessageFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-}
 
 async function resolvePanelChannel(client) {
   if (!config.link.panelChannelId) {
@@ -69,57 +44,19 @@ async function resolvePanelChannel(client) {
   return channel;
 }
 
-async function fetchStoredPanelMessage(channel, client) {
-  const state = await readPanelState();
-  if (!state?.messageId || state.channelId !== channel.id) {
-    return null;
-  }
-
-  const message = await channel.messages.fetch(state.messageId).catch(() => null);
-  if (!message || message.author?.id !== client.user.id) {
-    return null;
-  }
-
-  return message;
-}
-
 async function upsertPanel(client) {
   const channel = await resolvePanelChannel(client);
   if (!channel) {
     return;
   }
 
-  const components = buildLinkPanelComponents();
-  const existingMessage = await fetchStoredPanelMessage(channel, client);
-
-  if (existingMessage) {
-    await existingMessage
-      .edit({
-        components,
-        allowedMentions: SAFE_ALLOWED_MENTIONS,
-      })
-      .then(() => {
-        log.info(`Painel de vinculação atualizado em ${channel.id}.`);
-      })
-      .catch(async (error) => {
-        log.warn("Não foi possível atualizar o painel salvo. Vou enviar um novo.", error);
-        const message = await sendPanel(channel, components);
-        await writePanelState({ channelId: channel.id, messageId: message.id });
-      });
-    return;
-  }
-
-  const message = await sendPanel(channel, components);
-  await writePanelState({ channelId: channel.id, messageId: message.id });
-  log.info(`Painel de vinculação enviado em ${channel.id}.`);
-}
-
-async function sendPanel(channel, components) {
-  return channel.send({
-    flags: MessageFlags.IsComponentsV2,
-    components,
-    allowedMentions: SAFE_ALLOWED_MENTIONS,
+  await upsertPanelMessage({
+    client, channel,
+    customId: LINK_PANEL_CUSTOM_IDS.connectButton,
+    stateFilePath: config.link.panelMessageFilePath,
+    components: buildLinkPanelComponents(),
   });
+  log.info(`Painel de vinculação sincronizado em ${channel.id}.`);
 }
 
 async function replyEphemeral(interaction, content) {
@@ -200,7 +137,7 @@ module.exports = [
     name: Events.ClientReady,
     once: true,
     execute: async (client) => {
-      await upsertPanel(client);
+      await upsertPanel(client).catch((error) => log.error("Falha ao sincronizar painel de vinculação.", error));
     },
   },
   {
