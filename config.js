@@ -87,6 +87,7 @@ const defaultStatusImages = {
 };
 const ticketDataDir = resolveLocalPath(process.env.TICKET_DATA_DIR, path.join(process.cwd(), "data", "tickets"));
 const suggestionDataDir = path.join(process.cwd(), "data", "suggestions");
+const staffApplicationDataDir = path.join(process.cwd(), "data", "staff-applications");
 
 function buildDescriptionModalFields() {
   return [
@@ -157,6 +158,13 @@ const config = {
     logChannelId: String(process.env.DISCORD_TEAM_LOG_CHANNEL_ID || "1546592495503282186").trim(),
     titleEmoji: String(process.env.DISCORD_TEAM_TITLE_EMOJI || "<:lhamalogo:1542667514545442826>").trim(),
     color: normalizeColor(process.env.DISCORD_TEAM_COLOR, "E8A64A"),
+  },
+  staffApplications: {
+    reviewChannelId: String(process.env.DISCORD_STAFF_APPLICATION_CHANNEL_ID || "1541472235909546084").trim(),
+    panelMessageFilePath: resolveLocalPath(
+      process.env.STAFF_APPLICATION_PANEL_MESSAGE_FILE,
+      path.join(staffApplicationDataDir, "panel-message.json"),
+    ),
   },
   suggestions: {
     enabled: true,

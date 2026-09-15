@@ -17,6 +17,18 @@ npm install
 npm start
 ```
 
+## Candidatura à staff
+
+Publique o painel com `/staff painel`. Os jogadores clicam em **Candidatar-se à Staff** para enviar uma candidatura privada. O formulário pergunta sobre apresentação, vivência em comunidades, atendimento de conflitos, postura e motivação, com textos próprios para a Rede Lhama.
+
+Antes de liberar o comando, defina o canal privado que receberá as respostas:
+
+```env
+DISCORD_STAFF_APPLICATION_CHANNEL_ID=ID_DO_CANAL_DE_ANALISE
+```
+
+O bot precisa de **Ver canal**, **Enviar mensagens**, **Inserir links** e **Ler histórico de mensagens** no canal do painel; e de **Ver canal**, **Enviar mensagens** e **Inserir links** no canal de análise. Reinicie o bot após configurar para registrar `/staff`.
+
 ## Alteração de equipe
 
 Use `/equipe tipo:entrar` para entrar, promover ou rebaixar, e `/equipe tipo:remover` para retirar um cargo da equipe. O modal contém seleção de um membro, seleção de um cargo principal e upload obrigatório de uma foto PNG, JPG, WEBP ou GIF.

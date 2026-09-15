@@ -30,7 +30,7 @@ async function handleTeamInteraction(interaction) {
   let published = false;
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const type = interaction.customId.slice(TEAM_IDS.modalPrefix.length);
+    const [type, expectedMemberId = ""] = interaction.customId.slice(TEAM_IDS.modalPrefix.length).split(":");
     if (!interaction.inGuild() || !["entrar", "remover"].includes(type)) {
       await interaction.editReply("Alteração de equipe inválida. Use /equipe dentro do servidor.");
       return;
@@ -52,6 +52,10 @@ async function handleTeamInteraction(interaction) {
       return;
     }
     const memberId = users.firstKey();
+    if (expectedMemberId && memberId !== expectedMemberId) {
+      await interaction.editReply("O membro selecionado não corresponde à candidatura aprovada.");
+      return;
+    }
     const roleId = roleIds[0];
     const key = `${interaction.guildId}:${memberId}`;
     if (pendingChanges.has(key)) {

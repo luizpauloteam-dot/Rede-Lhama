@@ -11,14 +11,15 @@ const TEAM_IDS = {
   photo: "equipe:foto",
 };
 
-function buildTeamModal(type, ranks) {
+function buildTeamModal(type, ranks, selectedMemberId = "") {
   if (!["entrar", "remover"].includes(type)) throw new Error("Tipo de alteração de equipe inválido.");
   return new ModalBuilder()
-    .setCustomId(`${TEAM_IDS.modalPrefix}${type}`)
+    .setCustomId(`${TEAM_IDS.modalPrefix}${type}${selectedMemberId ? `:${selectedMemberId}` : ""}`)
     .setTitle(type === "entrar" ? "Entrar na equipe" : "Remover da equipe")
     .addComponents(
       new LabelBuilder().setLabel("Membro").setUserSelectMenuComponent(
-        new UserSelectMenuBuilder().setCustomId(TEAM_IDS.member).setMinValues(1).setMaxValues(1).setRequired(true),
+        new UserSelectMenuBuilder().setCustomId(TEAM_IDS.member).setMinValues(1).setMaxValues(1).setRequired(true)
+          .setDefaultUsers(selectedMemberId ? [selectedMemberId] : []),
       ),
       new LabelBuilder().setLabel("Cargo da equipe").setStringSelectMenuComponent(
         new StringSelectMenuBuilder().setCustomId(TEAM_IDS.role).setMinValues(1).setMaxValues(1).setRequired(true)

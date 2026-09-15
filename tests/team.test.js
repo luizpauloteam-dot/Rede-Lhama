@@ -66,6 +66,12 @@ test("equipe command and modal expose both operations, two required selects and 
   assert.throws(() => buildTeamModal("invalid"));
 });
 
+test("team modal can lock the selected candidate after a staff approval", () => {
+  const modal = buildTeamModal("entrar", resolveTeamRoles(fixture().guildRoles).ranks, "candidate").toJSON();
+  assert.equal(modal.custom_id, "equipe:modal:entrar:candidate");
+  assert.deepEqual(modal.components[0].component.default_values, [{ id: "candidate", type: "user" }]);
+});
+
 test("validates permissions, hierarchy, protected roles and membership state", () => {
   const scenarios = [
     (f) => { f.actor.permissions = new PermissionsBitField(); },
