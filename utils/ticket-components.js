@@ -372,12 +372,6 @@ function buildTicketClosedComponents(ticket) {
       ].join("\n"),
     ),
   ];
-  const media = buildMediaGallery(config.tickets.closedBannerUrl, "Banner de atendimento finalizado");
-
-  if (media) {
-    containerComponents.push(buildSeparator(), media);
-  }
-
   containerComponents.push(
     buildSeparator(),
     buildText("**Avalie este atendimento**\nSelecione uma nota para continuar."),

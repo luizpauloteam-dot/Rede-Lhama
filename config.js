@@ -88,6 +88,7 @@ const defaultStatusImages = {
 const ticketDataDir = resolveLocalPath(process.env.TICKET_DATA_DIR, path.join(process.cwd(), "data", "tickets"));
 const suggestionDataDir = path.join(process.cwd(), "data", "suggestions");
 const staffApplicationDataDir = path.join(process.cwd(), "data", "staff-applications");
+const builderApplicationDataDir = path.join(process.cwd(), "data", "builder-applications");
 
 function buildDescriptionModalFields() {
   return [
@@ -166,6 +167,13 @@ const config = {
       path.join(staffApplicationDataDir, "panel-message.json"),
     ),
   },
+  builderApplications: {
+    reviewChannelId: String(process.env.DISCORD_STAFF_APPLICATION_CHANNEL_ID || "1541472235909546084").trim(),
+    panelMessageFilePath: resolveLocalPath(
+      process.env.BUILDER_APPLICATION_PANEL_MESSAGE_FILE,
+      path.join(builderApplicationDataDir, "panel-message.json"),
+    ),
+  },
   suggestions: {
     enabled: true,
     dataDir: suggestionDataDir,
@@ -174,7 +182,7 @@ const config = {
     panelChannelId: "",
     channelId: String(process.env.DISCORD_SUGGESTION_CHANNEL_ID || "1541872794030178425").trim(),
     approvedChannelId: "1541872816788349038",
-    bannerUrl: "https://i.imgur.com/w594Pwm.png",
+    bannerUrl: "https://i.imgur.com/dvzKiyS.png",
   },
   tickets: {
     enabled: parseBoolean(process.env.TICKETS_ENABLED, true),
@@ -186,7 +194,6 @@ const config = {
     ),
     panelChannelId: String(process.env.DISCORD_TICKET_PANEL_CHANNEL_ID || "").trim(),
     anchorCategoryId: "1541597285115371570",
-    closedCategoryId: "1541646616778514512",
     protectedCategoryIds: parseList(process.env.DISCORD_TICKET_PROTECTED_CATEGORY_IDS),
     logChannelId: String(process.env.DISCORD_TICKET_LOG_CHANNEL_ID || process.env.DISCORD_LOG_CHANNEL_ID || "").trim(),
     transcriptChannelId: String(process.env.DISCORD_TICKET_TRANSCRIPT_CHANNEL_ID || "").trim(),
@@ -199,8 +206,7 @@ const config = {
     supportRoles: parseList(process.env.DISCORD_TICKET_SUPPORT_ROLE_IDS),
     coordinationRoles: parseList(process.env.DISCORD_TICKET_COORDINATION_ROLE_IDS),
     administratorRoles: parseList(process.env.DISCORD_TICKET_ADMINISTRATOR_ROLE_IDS),
-    bannerUrl: "https://i.imgur.com/kX0lTKL.png",
-    closedBannerUrl: "https://i.imgur.com/kX0lTKL.png",
+    bannerUrl: "https://i.imgur.com/V6q63gH.png",
     waitThresholds: {
       lowMax: parseNonNegativeInteger(process.env.TICKET_WAIT_LOW_MAX, 5),
       moderateMax: parseNonNegativeInteger(process.env.TICKET_WAIT_MODERATE_MAX, 20),

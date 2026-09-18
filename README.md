@@ -29,6 +29,10 @@ DISCORD_STAFF_APPLICATION_CHANNEL_ID=ID_DO_CANAL_DE_ANALISE
 
 O bot precisa de **Ver canal**, **Enviar mensagens**, **Inserir links** e **Ler histórico de mensagens** no canal do painel; e de **Ver canal**, **Enviar mensagens** e **Inserir links** no canal de análise. Reinicie o bot após configurar para registrar `/staff`.
 
+## Candidatura a construtor
+
+Publique com `/construtor painel`. O formulário solicita apresentação, experiência, afinidade com plugins, motivação e links/imagens de pelo menos cinco construções autorais. As respostas chegam no mesmo canal definido em `DISCORD_STAFF_APPLICATION_CHANNEL_ID` e podem ser aprovadas ou reprovadas como as candidaturas à staff.
+
 ## Alteração de equipe
 
 Use `/equipe tipo:entrar` para entrar, promover ou rebaixar, e `/equipe tipo:remover` para retirar um cargo da equipe. O modal contém seleção de um membro, seleção de um cargo principal e upload obrigatório de uma foto PNG, JPG, WEBP ou GIF.
@@ -177,7 +181,7 @@ DISCORD_TICKET_REVIEW_CHANNEL_ID=ID_CANAL_AVALIACOES
 
 O bot precisa de Gerenciar canais, Gerenciar cargos (para sobrescritas), Ver canais, Enviar mensagens, Anexar arquivos e Ler histórico. Configure os cargos de atendimento explicitamente. A Coordenação não concede acesso aos cargos de suporte comum. Administrador do Discord sempre ignora restrições de canal. Logs e transcripts de Coordenação ficam no MongoDB/disco, sem publicação nos canais gerais; a equipe autorizada pode baixar o HTML pela ação Transcript.
 
-Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar por DM com botão para abrir o ticket, renomear, fechar e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento bloqueia mensagens dos participantes, gera HTML e move o canal para a categoria protegida `1541646616778514512`, com nome `closed-usuario`, preservando as permissões. A mensagem de finalização com avaliação de 1 a 5 é enviada por DM ao titular e pode ser respondida mesmo após excluir o canal, enquanto o registro existir. Se a DM estiver bloqueada, o fechamento continua e a equipe recebe um aviso. A reabertura retorna o canal à categoria automática e ao nome `tipo-usuario` correspondente.
+Publique com `/ticket painel`. O painel mantém o banner existente. As ações incluem assumir, transferir, adicionar/remover usuário, chamar por DM com botão para abrir o ticket, renomear, fechar e excluir definitivamente após confirmação. Não é permitido adicionar terceiros em tickets de Coordenação. O fechamento bloqueia mensagens dos participantes, gera HTML e mantém o canal na categoria atual, sem arquivá-lo em uma categoria de tickets fechados. A mensagem de finalização com avaliação de 1 a 5 é enviada por DM ao titular e pode ser respondida mesmo após excluir o canal, enquanto o registro existir. Se a DM estiver bloqueada, o fechamento continua e a equipe recebe um aviso.
 
 O transcript consulta todo o histórico disponível no Discord, incluindo anexos, imagens, avatares e datas. É salvo em `data/tickets/transcripts` (ou `TICKET_DATA_DIR/transcripts`) antes de qualquer exclusão pelo bot. Mensagens apagadas diretamente no Discord antes da geração não podem ser recuperadas. Mantenha backup desse diretório. `/ticket transcript` também entrega o arquivo ao atendente. O contador usa incremento atômico no MongoDB e não é apagado pela limpeza de registros.
 

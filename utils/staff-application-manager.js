@@ -3,7 +3,9 @@ const config = require("../config");
 const { createLogger } = require("./logger");
 const { upsertPanelMessage } = require("./panel-message");
 const {
-  APPLICATION_FIELDS, STAFF_APPLICATION_IDS, buildStaffApplicationDecisionRow, buildStaffApplicationEmbed, buildStaffApplicationModal, buildStaffApplicationPanel,
+  APPLICATION_FIELDS, BUILDER_APPLICATION_FIELDS, BUILDER_APPLICATION_IDS, STAFF_APPLICATION_IDS,
+  buildBuilderApplicationDecisionRow, buildBuilderApplicationEmbed, buildBuilderApplicationModal, buildBuilderApplicationPanel,
+  buildStaffApplicationDecisionRow, buildStaffApplicationEmbed, buildStaffApplicationModal, buildStaffApplicationPanel,
 } = require("./staff-application-components");
 const { buildTeamModal } = require("./team-components");
 const { resolveTeamRoles } = require("./team-roles");
@@ -18,7 +20,28 @@ async function replyEphemeral(interaction, content) {
   await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
 }
 
-async function handleReviewButton(interaction, action, applicantId) {
+const APPLICATION_TYPES = [
+  {
+    ids: STAFF_APPLICATION_IDS, fields: APPLICATION_FIELDS, config: config.staffApplications,
+    label: "staff", failureMessage: "Não consegui enviar sua candidatura agora. Tente novamente mais tarde.",
+    successMessage: "Sua candidatura foi enviada para análise. Boa sorte!", buildDecisionRow: buildStaffApplicationDecisionRow,
+    buildEmbed: buildStaffApplicationEmbed, buildModal: buildStaffApplicationModal, buildPanel: buildStaffApplicationPanel,
+  },
+  {
+    ids: BUILDER_APPLICATION_IDS, fields: BUILDER_APPLICATION_FIELDS, config: config.builderApplications,
+    label: "construtor(a)", failureMessage: "Não consegui enviar sua candidatura de construtor agora. Tente novamente mais tarde.",
+    successMessage: "Sua candidatura de construtor foi enviada para análise. Boa sorte!", buildDecisionRow: buildBuilderApplicationDecisionRow,
+    buildEmbed: buildBuilderApplicationEmbed, buildModal: buildBuilderApplicationModal, buildPanel: buildBuilderApplicationPanel,
+  },
+];
+
+function findApplicationType(customId) {
+  if (typeof customId !== "string") return null;
+  return APPLICATION_TYPES.find(({ ids }) => customId === ids.openButton || customId === ids.modal ||
+    customId.startsWith(`${ids.approvePrefix}:`) || customId.startsWith(`${ids.rejectPrefix}:`));
+}
+
+async function handleReviewButton(interaction, applicationType, action, applicantId) {
   if (!interaction.inGuild() || !canReviewApplications(interaction.member)) {
     await replyEphemeral(interaction, "Você precisa da permissão Gerenciar cargos para analisar candidaturas.");
     return;
@@ -40,58 +63,67 @@ async function handleReviewButton(interaction, action, applicantId) {
     .setFooter({ text: `Candidatura reprovada por ${interaction.user.tag}` });
   await interaction.update({
     embeds: [applicationEmbed],
-    components: [buildStaffApplicationDecisionRow(applicantId, { disabled: true, rejected: true })],
+    components: [applicationType.buildDecisionRow(applicantId, { disabled: true, rejected: true })],
     allowedMentions: { parse: [] },
   });
 }
 
 async function upsertStaffApplicationPanel(client, channel) {
+  return upsertApplicationPanel(client, channel, APPLICATION_TYPES[0]);
+}
+
+async function upsertBuilderApplicationPanel(client, channel) {
+  return upsertApplicationPanel(client, channel, APPLICATION_TYPES[1]);
+}
+
+async function upsertApplicationPanel(client, channel, applicationType) {
   return upsertPanelMessage({
     client,
     channel,
-    components: buildStaffApplicationPanel(),
-    customId: STAFF_APPLICATION_IDS.openButton,
-    stateFilePath: config.staffApplications.panelMessageFilePath,
+    components: applicationType.buildPanel(),
+    customId: applicationType.ids.openButton,
+    stateFilePath: applicationType.config.panelMessageFilePath,
   });
 }
 
 async function handleStaffApplicationInteraction(interaction) {
-  if (interaction.isButton() && interaction.customId === STAFF_APPLICATION_IDS.openButton) {
-    await interaction.showModal(buildStaffApplicationModal());
+  const applicationType = findApplicationType(interaction.customId);
+  if (interaction.isButton() && applicationType && interaction.customId === applicationType.ids.openButton) {
+    await interaction.showModal(applicationType.buildModal());
     return;
   }
   if (interaction.isButton()) {
     const [, action, applicantId] = interaction.customId.split(":");
-    if (["approve", "reject"].includes(action) && applicantId) {
-      await handleReviewButton(interaction, action, applicantId);
+    if (applicationType && ["approve", "reject"].includes(action) && applicantId) {
+      await handleReviewButton(interaction, applicationType, action, applicantId);
       return;
     }
   }
-  if (!interaction.isModalSubmit() || interaction.customId !== STAFF_APPLICATION_IDS.modal) return;
+  if (!interaction.isModalSubmit() || !applicationType || interaction.customId !== applicationType.ids.modal) return;
   try {
-    if (!interaction.inGuild() || !config.staffApplications.reviewChannelId) {
+    if (!interaction.inGuild() || !applicationType.config.reviewChannelId) {
       await interaction.reply({ content: "Não foi possível receber esta candidatura.", flags: MessageFlags.Ephemeral });
       return;
     }
-    const reviewChannel = await interaction.guild.channels.fetch(config.staffApplications.reviewChannelId);
+    const reviewChannel = await interaction.guild.channels.fetch(applicationType.config.reviewChannelId);
     const permissions = reviewChannel?.permissionsFor(interaction.guild.members.me);
     if (!reviewChannel?.isTextBased() || !permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
       await interaction.reply({ content: "O canal de análise não está disponível. Avise a administração.", flags: MessageFlags.Ephemeral });
       return;
     }
-    const answers = APPLICATION_FIELDS.map((field) => ({ label: field.label, value: interaction.fields.getTextInputValue(field.id) }));
+    const answers = applicationType.fields.map((field) => ({ label: field.label, value: interaction.fields.getTextInputValue(field.id) }));
     await reviewChannel.send({
-      embeds: [buildStaffApplicationEmbed({ applicant: interaction.user, answers })],
-      components: [buildStaffApplicationDecisionRow(interaction.user.id)],
+      embeds: [applicationType.buildEmbed({ applicant: interaction.user, answers })],
+      components: [applicationType.buildDecisionRow(interaction.user.id)],
       allowedMentions: { parse: [] },
     });
-    await interaction.reply({ content: "Sua candidatura foi enviada para análise. Boa sorte!", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: applicationType.successMessage, flags: MessageFlags.Ephemeral });
   } catch (error) {
-    log.error(`Falha ao registrar candidatura à staff (interação ${interaction.id}).`, error);
-    const payload = { content: "Não consegui enviar sua candidatura agora. Tente novamente mais tarde.", flags: MessageFlags.Ephemeral };
+    log.error(`Falha ao registrar candidatura a ${applicationType.label} (interação ${interaction.id}).`, error);
+    const payload = { content: applicationType.failureMessage, flags: MessageFlags.Ephemeral };
     if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
   }
 }
 
-module.exports = { handleStaffApplicationInteraction, upsertStaffApplicationPanel };
+module.exports = { handleStaffApplicationInteraction, upsertBuilderApplicationPanel, upsertStaffApplicationPanel };

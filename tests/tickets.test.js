@@ -99,7 +99,7 @@ test("never deletes anchor, protected, ordinary or foreign categories", async (t
   mockCategories(t);
   const { guild, mutations } = fakeGuild();
   t.mock.property(config.tickets, "protectedCategoryIds", ["protected"]);
-  for (const id of [config.tickets.anchorCategoryId, config.tickets.closedCategoryId, "protected", "ordinary"]) assert.equal(await cleanupTicketCategory(guild, id), false);
+  for (const id of [config.tickets.anchorCategoryId, "protected", "ordinary"]) assert.equal(await cleanupTicketCategory(guild, id), false);
   assert.equal(await cleanupTicketCategory({ ...guild, id: "foreign" }, "category"), false);
   assert.deepEqual(mutations, []);
 });
@@ -213,7 +213,7 @@ test("transfer opens a modal with User Select and validates the submitted member
   assert.equal(ticket.assignedStaffId, undefined);
 });
 
-test("opening uses atomic numbering; closing archives with preserved permissions and sends review by DM", async (t) => {
+test("opening uses atomic numbering; closing preserves the channel category and sends review by DM", async (t) => {
   const fs = require("fs").promises;
   const writes = [];
   t.mock.method(fs, "mkdir", async () => {});
@@ -240,7 +240,6 @@ test("opening uses atomic numbering; closing archives with preserved permissions
     assert.equal(options.upsert, true); return { seq: 52 };
   });
   const { guild, channels } = fakeGuild();
-  channels.set(config.tickets.closedCategoryId, { id: config.tickets.closedCategoryId, type: ChannelType.GuildCategory });
   const sent = []; const permissionEdits = []; const directMessages = []; const countdownEdits = [];
   const createChannel = guild.channels.create;
   guild.channels.create = async (payload) => {
@@ -311,9 +310,8 @@ test("opening uses atomic numbering; closing archives with preserved permissions
   assert(permissionEdits.some(([id, permissions]) => id === ownerId && permissions.SendMessages === false));
   assert(!sent.some((payload) => JSON.stringify(payload).includes("ticket:review:")));
   assert(directMessages.some((payload) => JSON.stringify(payload).includes("ticket:review:")));
-  assert.equal(channels.get(stored.channelId).name, "closed-jogador");
-  assert.equal(stored.categoryId, config.tickets.closedCategoryId);
-  assert(channels.has(config.tickets.closedCategoryId));
+  assert.equal(channels.get(stored.channelId).name, "duvidas-jogador");
+  assert.notEqual(stored.categoryId, undefined);
 });
 
 test("review selection accepts the owner in DM and rejects another user", async (t) => {

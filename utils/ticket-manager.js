@@ -1100,28 +1100,6 @@ async function sendTicketReview(client, ticket) {
   }
 }
 
-async function archiveTicketChannel(client, ticket) {
-  return withCategoryLock(async () => {
-    const guild = await resolveStaffGuild(client);
-    const channels = await guild.channels.fetch();
-    const category = channels.get(config.tickets.closedCategoryId);
-    if (category?.type !== ChannelType.GuildCategory) throw new Error("Categoria de tickets fechados não encontrada.");
-    const channel = await fetchStaffChannel(client, ticket);
-    if (!channel) throw new Error("Canal do ticket não encontrado.");
-    if (channel.parentId !== category.id && channels.filter((entry) => entry.parentId === category.id).size >= 50) {
-      throw new Error("A categoria de tickets fechados está cheia.");
-    }
-    const user = await client.users.fetch(ticket.ownerId);
-    const username = require("./ticket-common").normalizeDiscordName(user.username) || ticket.ownerId;
-    const previousCategoryId = channel.parentId;
-    await channel.edit({ parent: category.id, lockPermissions: false, name: `closed-${username}`.slice(0, 100),
-      reason: "Arquivamento de ticket fechado" });
-    ticket.categoryId = category.id;
-    await ticket.save();
-    await cleanupTicketCategory(guild, previousCategoryId);
-  });
-}
-
 async function closeTicket(interaction, ticketId, reason) {
   if (!interaction.deferred && !interaction.replied) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -1193,8 +1171,6 @@ async function closeTicket(interaction, ticketId, reason) {
     metadata: transcript,
   });
 
-  await archiveTicketChannel(interaction.client, updatedTicket);
-
   const finalMessage = await sendTicketReview(interaction.client, updatedTicket);
   updatedTicket.finalMessageId = finalMessage?.id || "";
   await updatedTicket.save();
@@ -1215,8 +1191,8 @@ async function closeTicket(interaction, ticketId, reason) {
   await replyEphemeral(
     interaction,
     finalMessage
-      ? "Ticket arquivado, transcript salvo e avaliação enviada por DM."
-      : "Ticket arquivado e transcript salvo. Não foi possível enviar a avaliação: a DM do usuário está indisponível.",
+      ? "Ticket fechado, transcript salvo e avaliação enviada por DM."
+      : "Ticket fechado e transcript salvo. Não foi possível enviar a avaliação: a DM do usuário está indisponível.",
     { components: [] },
   );
   await refreshSupportPanel(interaction.client);
