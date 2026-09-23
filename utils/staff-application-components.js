@@ -2,6 +2,7 @@ const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, EmbedBuilder, LabelBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require("discord.js");
+const config = require("../config");
 
 const STAFF_APPLICATION_IDS = {
   modal: "staff:application",
@@ -112,25 +113,23 @@ function getTimeGreeting(date = new Date()) {
 }
 
 function buildRejectionMessage({ name, reviewer, role, reason, postscript }) {
-  const lines = [
-    `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer}**, **fundador** da **Rede Lhama** e estou a entrar em contato com você por conta da sua candidatura para o cargo de **${role}** no servidor. Antes de mais nada, gostaríamos de expressar nosso **agradecimento** pelo seu interesse em fazer parte da nossa equipe pela **dedicação** e tempo que você investiu ao preencher nosso formulário.`,
-    "Depois de uma avaliação cuidadosa, chegamos à conclusão de que, por enquanto, **o seu perfil não atende completamente às nossas expectativas para a vaga em questão**. Por esse motivo, não seguiremos para a próxima etapa do processo.",
+  const description = [
+    `${getTimeGreeting()} ${name}, agradecemos pelo interesse e pelo tempo dedicado \u00e0 candidatura para **${role}**.`,
+    "Ap\u00f3s avaliarmos seu formul\u00e1rio, decidimos n\u00e3o seguir com a candidatura neste momento. Desejamos sucesso nos seus pr\u00f3ximos passos.",
     `**Motivo:** ${reason}`,
-    "Compreendemos que essa não é a notícia que você gostaria de receber, mas esperamos que essa experiência possa contribuir de alguma forma para o seu desenvolvimento. Desejamos todo o sucesso na sua busca por novas oportunidades.",
-    "Agradecemos mais uma vez pelo seu formulário e envolvimento.",
-  ];
-  if (postscript) lines.push(`**PS:** ${postscript}`);
-  lines.push("Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama © 2026");
-  return lines.join("\n\n");
+    postscript ? `**PS:** ${postscript}` : "",
+    "Atenciosamente,\nRede Lhama Team.",
+  ].filter(Boolean).join("\n\n");
+  return new EmbedBuilder().setColor(0xED4245)
+    .setTitle(`${config.team.titleEmoji} \u2022 Candidatura Reprovada`)
+    .setDescription(description).setFooter({ text: `Analisada por ${reviewer.tag}` }).setTimestamp();
 }
 
 function buildApprovalMessage({ name, reviewer, role }) {
-  return [
-    `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer}**, **fundador** da **Rede Lhama**. Estou entrando em contato sobre sua candidatura para o cargo de **${role}** no servidor.`,
-    `Após avaliarmos sua candidatura, tenho o prazer de informar que você foi **aprovado(a)** para fazer parte da equipe. Parabéns e seja bem-vindo(a) à **Rede Lhama**!`,
-    "Agradecemos pelo seu interesse, dedicação e tempo investido no formulário. Em breve, a equipe poderá entrar em contato para orientar você sobre os próximos passos.",
-    "Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama © 2026",
-  ].join("\n\n");
+  return new EmbedBuilder().setColor(0x57F287)
+    .setTitle(`${config.team.titleEmoji} \u2022 Candidatura Aprovada`)
+    .setDescription(`${getTimeGreeting()} ${name}, sua candidatura para **${role}** foi aprovada. Parab\u00e9ns e seja bem-vindo(a) \u00e0 equipe da **Rede Lhama**!\n\nEm breve, a equipe poder\u00e1 entrar em contato para orientar voc\u00ea sobre os pr\u00f3ximos passos.\n\nAtenciosamente,\nRede Lhama Team.`)
+    .setFooter({ text: `Aprovada por ${reviewer.tag}` }).setTimestamp();
 }
 
 function buildStaffApplicationModal() { return buildApplicationModal({ ids: STAFF_APPLICATION_IDS, title: "Candidatura à Staff", fields: APPLICATION_FIELDS }); }
@@ -141,8 +140,12 @@ function buildStaffApplicationPanel() {
 function buildBuilderApplicationPanel() {
   return buildApplicationPanel({ ids: BUILDER_APPLICATION_IDS, title: "Recrutamento de Construtor(a)", description: "Mostre seu portfólio e venha construir a Rede Lhama com a gente.", details: "Conte sobre sua experiência, suas ferramentas e envie as imagens das suas melhores construções.", buttonLabel: "Candidatar-se a Construtor(a)", emoji: "🏗️" });
 }
-function buildStaffApplicationEmbed({ applicant, answers }) { return buildApplicationEmbed({ applicant, answers, title: "Nova candidatura à staff" }); }
-function buildBuilderApplicationEmbed({ applicant, answers }) { return buildApplicationEmbed({ applicant, answers, title: "Nova candidatura a construtor(a)" }); }
+function buildStaffApplicationEmbed({ applicant, answers }) {
+  return buildApplicationEmbed({ applicant, answers, title: `${config.team.titleEmoji} • Candidatura STAFF` });
+}
+function buildBuilderApplicationEmbed({ applicant, answers }) {
+  return buildApplicationEmbed({ applicant, answers, title: `${config.team.titleEmoji} • Candidatura Construtor` });
+}
 function buildStaffApplicationDecisionRow(applicantId, options) { return buildApplicationDecisionRow(STAFF_APPLICATION_IDS, applicantId, options); }
 function buildBuilderApplicationDecisionRow(applicantId, options) { return buildApplicationDecisionRow(BUILDER_APPLICATION_IDS, applicantId, options); }
 

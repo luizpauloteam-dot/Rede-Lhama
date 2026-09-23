@@ -84,7 +84,7 @@ async function handleRejectionModal(interaction, applicationType) {
     const applicant = await interaction.client.users.fetch(applicantId);
     const role = applicationType === APPLICATION_TYPES[1] ? "Construtor" : "Staff";
     await applicant.send({
-      content: buildRejectionMessage({ name, reviewer: interaction.user, role, reason, postscript }),
+      embeds: [buildRejectionMessage({ name, reviewer: interaction.user, role, reason, postscript })],
       allowedMentions: { parse: [] },
     });
     const reviewMessage = await interaction.channel.messages.fetch(messageId);

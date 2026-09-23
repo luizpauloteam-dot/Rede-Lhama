@@ -120,7 +120,7 @@ async function handleTeamInteraction(interaction) {
     if (type === "entrar" && expectedMemberId) {
       try {
         await member.send({
-          content: buildApprovalMessage({ name: member.displayName, reviewer: interaction.user, role: role.name }),
+          embeds: [buildApprovalMessage({ name: member.displayName, reviewer: interaction.user, role: role.name })],
           allowedMentions: { parse: [] },
         });
         approvalNotice = " A mensagem de aprovação foi enviada por DM.";
