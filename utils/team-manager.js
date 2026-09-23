@@ -3,6 +3,7 @@ const config = require("../config");
 const { validateTargetChannel } = require("./discord-channel-access");
 const { createLogger } = require("./logger");
 const { TEAM_IDS, buildTeamRecord } = require("./team-components");
+const { buildApprovalMessage } = require("./staff-application-components");
 const { resolveTeamRoles, planTeamChange } = require("./team-roles");
 
 const log = createLogger("equipe");
@@ -113,7 +114,20 @@ async function handleTeamInteraction(interaction) {
     changed = true;
     const message = await targetChannel.send(record);
     published = true;
-    await interaction.editReply(`Cargo ${type === "entrar" ? "adicionado" : "removido"} e registro publicado: ${message.url}`);
+    let approvalNotice = "";
+    if (type === "entrar" && expectedMemberId) {
+      try {
+        await member.send({
+          content: buildApprovalMessage({ name: member.displayName, reviewer: interaction.user, role: role.name }),
+          allowedMentions: { parse: [] },
+        });
+        approvalNotice = " A mensagem de aprovação foi enviada por DM.";
+      } catch (dmError) {
+        log.warn(`Não foi possível enviar a aprovação por DM para ${member.id}.`, dmError);
+        approvalNotice = " Não consegui enviar a DM de aprovação; confira se a pessoa aceita mensagens diretas.";
+      }
+    }
+    await interaction.editReply(`Cargo ${type === "entrar" ? "adicionado" : "removido"} e registro publicado: ${message.url}.${approvalNotice}`);
   } catch (error) {
     log.error(`Falha na alteração de equipe (interação ${interaction.id}, cargo alterado: ${changed}, registro publicado: ${published}).`, error);
     const content = published

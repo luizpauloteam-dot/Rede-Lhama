@@ -4,6 +4,7 @@ const { createLogger } = require("./logger");
 const { upsertPanelMessage } = require("./panel-message");
 const {
   APPLICATION_FIELDS, BUILDER_APPLICATION_FIELDS, BUILDER_APPLICATION_IDS, STAFF_APPLICATION_IDS,
+  buildApplicationRejectionModal, buildRejectionMessage,
   buildBuilderApplicationDecisionRow, buildBuilderApplicationEmbed, buildBuilderApplicationModal, buildBuilderApplicationPanel,
   buildStaffApplicationDecisionRow, buildStaffApplicationEmbed, buildStaffApplicationModal, buildStaffApplicationPanel,
 } = require("./staff-application-components");
@@ -38,7 +39,8 @@ const APPLICATION_TYPES = [
 function findApplicationType(customId) {
   if (typeof customId !== "string") return null;
   return APPLICATION_TYPES.find(({ ids }) => customId === ids.openButton || customId === ids.modal ||
-    customId.startsWith(`${ids.approvePrefix}:`) || customId.startsWith(`${ids.rejectPrefix}:`));
+    customId.startsWith(`${ids.approvePrefix}:`) || customId.startsWith(`${ids.rejectPrefix}:`) ||
+    customId.startsWith(`${ids.rejectPrefix}-submit:`));
 }
 
 async function handleReviewButton(interaction, applicationType, action, applicantId) {
@@ -58,14 +60,46 @@ async function handleReviewButton(interaction, applicationType, action, applican
     await interaction.showModal(buildTeamModal("entrar", ranks, applicantId));
     return;
   }
-  const applicationEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-    .setColor(0xED4245)
-    .setFooter({ text: `Candidatura reprovada por ${interaction.user.tag}` });
-  await interaction.update({
-    embeds: [applicationEmbed],
-    components: [applicationType.buildDecisionRow(applicantId, { disabled: true, rejected: true })],
-    allowedMentions: { parse: [] },
-  });
+  await interaction.showModal(buildApplicationRejectionModal(
+    applicationType === APPLICATION_TYPES[1] ? "builder" : "staff", applicantId, interaction.message.id,
+  ));
+}
+
+async function handleRejectionModal(interaction, applicationType) {
+  if (!interaction.inGuild() || !canReviewApplications(interaction.member)) {
+    await replyEphemeral(interaction, "Você precisa da permissão Gerenciar cargos para analisar candidaturas.");
+    return;
+  }
+  const [, , applicantId, messageId] = interaction.customId.split(":");
+  const name = interaction.fields.getTextInputValue("applicant_name").trim();
+  const reason = interaction.fields.getTextInputValue("rejection_reason").trim();
+  const postscript = interaction.fields.getTextInputValue("postscript").trim();
+  if (!applicantId || !messageId || !name || !reason) {
+    await replyEphemeral(interaction, "Preencha o nome e o motivo para enviar a recusa. Abra o formulário novamente.");
+    return;
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    const applicant = await interaction.client.users.fetch(applicantId);
+    const role = applicationType === APPLICATION_TYPES[1] ? "Construtor" : "Staff";
+    await applicant.send({
+      content: buildRejectionMessage({ name, reviewer: interaction.user, role, reason, postscript }),
+      allowedMentions: { parse: [] },
+    });
+    const reviewMessage = await interaction.channel.messages.fetch(messageId);
+    const applicationEmbed = EmbedBuilder.from(reviewMessage.embeds[0])
+      .setColor(0xED4245)
+      .setFooter({ text: `Candidatura reprovada por ${interaction.user.tag}` });
+    await reviewMessage.edit({
+      embeds: [applicationEmbed],
+      components: [applicationType.buildDecisionRow(applicantId, { disabled: true, rejected: true })],
+      allowedMentions: { parse: [] },
+    });
+    await interaction.editReply("Recusa enviada por mensagem direta e candidatura marcada como reprovada.");
+  } catch (error) {
+    log.error(`Falha ao enviar recusa da candidatura ${applicantId} (interação ${interaction.id}).`, error);
+    await interaction.editReply("Não consegui enviar a mensagem. Verifique se a pessoa aceita mensagens diretas e tente novamente.");
+  }
 }
 
 async function upsertStaffApplicationPanel(client, channel) {
@@ -88,6 +122,10 @@ async function upsertApplicationPanel(client, channel, applicationType) {
 
 async function handleStaffApplicationInteraction(interaction) {
   const applicationType = findApplicationType(interaction.customId);
+  if (interaction.isModalSubmit() && applicationType && interaction.customId.startsWith(`${applicationType.ids.rejectPrefix}-submit:`)) {
+    await handleRejectionModal(interaction, applicationType);
+    return;
+  }
   if (interaction.isButton() && applicationType && interaction.customId === applicationType.ids.openButton) {
     await interaction.showModal(applicationType.buildModal());
     return;

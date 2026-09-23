@@ -83,6 +83,56 @@ function buildApplicationDecisionRow(ids, applicantId, { disabled = false, rejec
   ).toJSON();
 }
 
+function buildApplicationRejectionModal(applicationType, applicantId, messageId) {
+  return new ModalBuilder()
+    .setCustomId(`${applicationType}:reject-submit:${applicantId}:${messageId}`)
+    .setTitle("Enviar recusa da candidatura")
+    .addLabelComponents(
+      new LabelBuilder().setLabel("Nome da pessoa").setTextInputComponent(
+        new TextInputBuilder().setCustomId("applicant_name").setStyle(TextInputStyle.Short).setMaxLength(80).setRequired(true),
+      ),
+      new LabelBuilder().setLabel("Motivo").setTextInputComponent(
+        new TextInputBuilder().setCustomId("rejection_reason").setStyle(TextInputStyle.Paragraph).setMaxLength(700).setRequired(true),
+      ),
+      new LabelBuilder().setLabel("PS (opcional)").setTextInputComponent(
+        new TextInputBuilder().setCustomId("postscript").setStyle(TextInputStyle.Paragraph).setMaxLength(300).setRequired(false),
+      ),
+    );
+}
+
+function getTimeGreeting(date = new Date()) {
+  const hour = Number(new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).format(date));
+  if (hour >= 5 && hour < 12) return "Bom dia";
+  if (hour >= 12 && hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function buildRejectionMessage({ name, reviewer, role, reason, postscript }) {
+  const lines = [
+    `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer}**, **fundador** da **Rede Lhama** e estou a entrar em contato com você por conta da sua candidatura para o cargo de **${role}** no servidor. Antes de mais nada, gostaríamos de expressar nosso **agradecimento** pelo seu interesse em fazer parte da nossa equipe pela **dedicação** e tempo que você investiu ao preencher nosso formulário.`,
+    "Depois de uma avaliação cuidadosa, chegamos à conclusão de que, por enquanto, **o seu perfil não atende completamente às nossas expectativas para a vaga em questão**. Por esse motivo, não seguiremos para a próxima etapa do processo.",
+    `**Motivo:** ${reason}`,
+    "Compreendemos que essa não é a notícia que você gostaria de receber, mas esperamos que essa experiência possa contribuir de alguma forma para o seu desenvolvimento. Desejamos todo o sucesso na sua busca por novas oportunidades.",
+    "Agradecemos mais uma vez pelo seu formulário e envolvimento.",
+  ];
+  if (postscript) lines.push(`**PS:** ${postscript}`);
+  lines.push("Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama © 2026");
+  return lines.join("\n\n");
+}
+
+function buildApprovalMessage({ name, reviewer, role }) {
+  return [
+    `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer}**, **fundador** da **Rede Lhama**. Estou entrando em contato sobre sua candidatura para o cargo de **${role}** no servidor.`,
+    `Após avaliarmos sua candidatura, tenho o prazer de informar que você foi **aprovado(a)** para fazer parte da equipe. Parabéns e seja bem-vindo(a) à **Rede Lhama**!`,
+    "Agradecemos pelo seu interesse, dedicação e tempo investido no formulário. Em breve, a equipe poderá entrar em contato para orientar você sobre os próximos passos.",
+    "Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama © 2026",
+  ].join("\n\n");
+}
+
 function buildStaffApplicationModal() { return buildApplicationModal({ ids: STAFF_APPLICATION_IDS, title: "Candidatura à Staff", fields: APPLICATION_FIELDS }); }
 function buildBuilderApplicationModal() { return buildApplicationModal({ ids: BUILDER_APPLICATION_IDS, title: "Construtor(a)", fields: BUILDER_APPLICATION_FIELDS }); }
 function buildStaffApplicationPanel() {
@@ -99,5 +149,6 @@ function buildBuilderApplicationDecisionRow(applicantId, options) { return build
 module.exports = {
   APPLICATION_FIELDS, BUILDER_APPLICATION_FIELDS, BUILDER_APPLICATION_IDS, STAFF_APPLICATION_IDS,
   buildBuilderApplicationDecisionRow, buildBuilderApplicationEmbed, buildBuilderApplicationModal, buildBuilderApplicationPanel,
+  buildApplicationRejectionModal, buildApprovalMessage, buildRejectionMessage,
   buildStaffApplicationDecisionRow, buildStaffApplicationEmbed, buildStaffApplicationModal, buildStaffApplicationPanel,
 };
