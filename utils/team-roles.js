@@ -23,8 +23,7 @@ function resolveTeamRoles(roles) {
     throw new Error("Cada nível da equipe precisa corresponder a um cargo diferente em DISCORD_TEAM_ROLE_MAP.");
   }
   const baseRole = resolveConfiguredRole(roles, config.team.baseRoleName);
-  if (!baseRole) throw new Error("O cargo base Team não foi encontrado. Confira o nome ou configure seu ID em DISCORD_TEAM_ROLE_MAP.");
-  if (ranks.some(({ role }) => role.id === baseRole.id)) throw new Error("O cargo base Team precisa ser diferente dos cargos principais da equipe.");
+  if (baseRole && ranks.some(({ role }) => role.id === baseRole.id)) throw new Error("O cargo base Team precisa ser diferente dos cargos principais da equipe.");
   return { ranks, baseRole };
 }
 
@@ -39,8 +38,8 @@ function planTeamChange({ member, role, type, ranks, baseRole }) {
   const removeIds = type === "remover" ? [role.id] : current.map((entry) => entry.role.id);
   const addIds = type === "entrar" ? [role.id] : [];
   const remainsInTeam = type === "entrar" || current.some((entry) => entry.role.id !== role.id);
-  if (remainsInTeam && !member.roles.cache.has(baseRole.id)) addIds.push(baseRole.id);
-  if (!remainsInTeam && member.roles.cache.has(baseRole.id)) removeIds.push(baseRole.id);
+  if (baseRole && remainsInTeam && !member.roles.cache.has(baseRole.id)) addIds.push(baseRole.id);
+  if (baseRole && !remainsInTeam && member.roles.cache.has(baseRole.id)) removeIds.push(baseRole.id);
   const desired = new Set(member.roles.cache.keys());
   for (const id of removeIds) desired.delete(id);
   for (const id of addIds) desired.add(id);

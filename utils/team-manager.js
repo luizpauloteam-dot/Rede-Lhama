@@ -10,8 +10,9 @@ const log = createLogger("equipe");
 // Only protects concurrent operations; Discord remains the source of truth for membership.
 const pendingChanges = new Set();
 
-function validateTeamChange({ guild, actor, bot, member, role, type }) {
-  if (!actor.permissions.has(PermissionFlagsBits.ManageRoles)) return "Você precisa da permissão Gerenciar cargos.";
+function validateTeamChange({ guild, actor, bot, member, role, type, isApplicationApproval = false }) {
+  const isApplicationReviewer = isApplicationApproval && config.staffApplications.reviewerUserIds.includes(actor.id);
+  if (!actor.permissions.has(PermissionFlagsBits.ManageRoles) && !isApplicationReviewer) return "Você precisa da permissão Gerenciar cargos.";
   if (!bot.permissions.has(PermissionFlagsBits.ManageRoles)) return "Preciso da permissão Gerenciar cargos.";
   if (!role || role.id === guild.id || role.managed) return "Selecione um cargo comum da equipe, sem integração.";
   if (bot.roles.highest.comparePositionTo(role) <= 0) return "O cargo escolhido precisa estar abaixo do meu cargo mais alto.";
@@ -76,7 +77,8 @@ async function handleTeamInteraction(interaction) {
       guild.roles.fetch(),
     ]);
     const role = guildRoles.get(roleId);
-    const error = validateTeamChange({ guild, actor, bot, member, role, type });
+    const isApplicationApproval = Boolean(expectedMemberId && type === "entrar" && member?.id === expectedMemberId);
+    const error = validateTeamChange({ guild, actor, bot, member, role, type, isApplicationApproval });
     if (error) {
       await interaction.editReply(error);
       return;
@@ -91,7 +93,7 @@ async function handleTeamInteraction(interaction) {
     for (const changedRoleId of plan.changedRoleIds) {
       const changedRole = guildRoles.get(changedRoleId);
       const permissionError = validateTeamChange({ guild, actor, bot, member, role: changedRole,
-        type: member.roles.cache.has(changedRoleId) ? "remover" : "entrar" });
+        type: member.roles.cache.has(changedRoleId) ? "remover" : "entrar", isApplicationApproval });
       if (permissionError) {
         await interaction.editReply(permissionError);
         return;

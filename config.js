@@ -162,6 +162,7 @@ const config = {
   },
   staffApplications: {
     reviewChannelId: String(process.env.DISCORD_STAFF_APPLICATION_CHANNEL_ID || "1541472235909546084").trim(),
+    reviewerUserIds: parseList(process.env.DISCORD_STAFF_APPLICATION_REVIEWER_USER_IDS),
     panelMessageFilePath: resolveLocalPath(
       process.env.STAFF_APPLICATION_PANEL_MESSAGE_FILE,
       path.join(staffApplicationDataDir, "panel-message.json"),

@@ -13,8 +13,9 @@ const { resolveTeamRoles } = require("./team-roles");
 
 const log = createLogger("staff-applications");
 
-function canReviewApplications(member) {
-  return Boolean(member?.permissions?.has(PermissionFlagsBits.ManageRoles));
+function canReviewApplications(member, userId) {
+  return Boolean(member?.permissions?.has(PermissionFlagsBits.ManageRoles) ||
+    config.staffApplications.reviewerUserIds.includes(userId));
 }
 
 async function replyEphemeral(interaction, content) {
@@ -44,8 +45,8 @@ function findApplicationType(customId) {
 }
 
 async function handleReviewButton(interaction, applicationType, action, applicantId) {
-  if (!interaction.inGuild() || !canReviewApplications(interaction.member)) {
-    await replyEphemeral(interaction, "Você precisa da permissão Gerenciar cargos para analisar candidaturas.");
+  if (!interaction.inGuild() || !canReviewApplications(interaction.member, interaction.user.id)) {
+    await replyEphemeral(interaction, "Você não tem permissão para analisar candidaturas.");
     return;
   }
   if (action === "approve") {
@@ -66,8 +67,8 @@ async function handleReviewButton(interaction, applicationType, action, applican
 }
 
 async function handleRejectionModal(interaction, applicationType) {
-  if (!interaction.inGuild() || !canReviewApplications(interaction.member)) {
-    await replyEphemeral(interaction, "Você precisa da permissão Gerenciar cargos para analisar candidaturas.");
+  if (!interaction.inGuild() || !canReviewApplications(interaction.member, interaction.user.id)) {
+    await replyEphemeral(interaction, "Você não tem permissão para analisar candidaturas.");
     return;
   }
   const [, , applicantId, messageId] = interaction.customId.split(":");
