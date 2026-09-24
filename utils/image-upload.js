@@ -1,9 +1,44 @@
-const { EmbedBuilder } = require("discord.js");
+const {
+  ContainerBuilder,
+  MessageFlags,
+  SeparatorBuilder,
+  TextDisplayBuilder,
+} = require("discord.js");
 
 const config = require("../config");
 const { createLogger } = require("./logger");
 
 const log = createLogger("image-upload");
+
+function createUploadCard({ title, user, channel, amount, results = [], error = "", color }) {
+  const container = new ContainerBuilder().setAccentColor(color);
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`));
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+    `**Usuário**\n${user} (${user.id})\n\n**Canal**\n${channel}\n\n**Imagens**\n${amount}`,
+  ));
+
+  if (error) {
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Erro**\n${error.slice(0, 1500)}`));
+  }
+  if (results.length) {
+    const links = results.map((image, index) => `**${index + 1}. [${image.name}](${image.url})**`).join("\n");
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Links gerados**\n${links.slice(0, 1500)}`));
+  }
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Rede Lhama • Sistema de Upload • <t:${Math.floor(Date.now() / 1000)}:t>`));
+  return container;
+}
+
+function createUserResultCard(results, error = "") {
+  const container = new ContainerBuilder().setAccentColor(error ? 0xE74C3C : 0x2ECC71);
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+    error ? `## ❌ Upload não concluído\n${error}` : `## 🖼️ Imagens processadas!\n${results.map((image, index) => `**Imagem ${index + 1}:**\n${image.url}`).join("\n\n")}`,
+  ));
+  return container;
+}
 
 function isValidImage(attachment) {
   const contentType = String(attachment.contentType || "").split(";")[0].toLowerCase();
@@ -43,22 +78,18 @@ async function sendLog(client, { user, channel, results = [], error = "" }) {
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(error ? 0xE74C3C : 0x2ECC71)
-      .setTitle(error ? "Upload de imagens com erro" : "Upload de imagens concluído")
-      .addFields(
-        { name: "Usuário", value: `${user} (${user.id})` },
-        { name: "Canal", value: `${channel}`, inline: true },
-        { name: "Imagens", value: String(results.length), inline: true },
-      )
-      .setTimestamp();
-
-    if (error) embed.addFields({ name: "Erro", value: error.slice(0, 1024) });
-    if (results.length) {
-      const links = results.map((image, index) => `**${index + 1}.** [${image.name}](${image.url})`).join("\n");
-      embed.addFields({ name: "Links gerados", value: links.slice(0, 1024) });
-    }
-    await logChannel.send({ embeds: [embed] });
+    await logChannel.send({
+      flags: MessageFlags.IsComponentsV2,
+      components: [createUploadCard({
+        title: error ? "⚠️ Upload de imagens com erro" : "🖼️ Novo upload de imagens",
+        user,
+        channel,
+        amount: results.length,
+        results,
+        error,
+        color: error ? 0xE74C3C : 0x2ECC71,
+      })],
+    });
   } catch (sendError) {
     log.error("Falha ao publicar log de upload.", sendError);
   }
@@ -84,8 +115,4 @@ async function processImages(client, { user, channel, attachments }) {
   }
 }
 
-function formatResults(results) {
-  return results.map((image, index) => `**Imagem ${index + 1}:** ${image.url}`).join("\n");
-}
-
-module.exports = { config, formatResults, isValidImage, processImages, sendLog };
+module.exports = { config, createUserResultCard, isValidImage, processImages, sendLog };

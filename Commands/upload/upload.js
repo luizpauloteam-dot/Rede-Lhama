@@ -1,6 +1,6 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { MessageFlags, SlashCommandBuilder } = require("discord.js");
 
-const { config, formatResults, isValidImage, processImages } = require("../../utils/image-upload");
+const { config, createUserResultCard, isValidImage, processImages } = require("../../utils/image-upload");
 
 const data = new SlashCommandBuilder()
   .setName("upload")
@@ -17,10 +17,13 @@ module.exports = {
   data,
   async run(client, interaction) {
     if (interaction.channelId !== config.imageUpload.uploadChannelId) {
-      await interaction.reply({ content: "O comando `/upload` só pode ser usado no canal de imagens.", ephemeral: true });
+      await interaction.reply({
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+        components: [createUserResultCard([], "O comando `/upload` só pode ser usado no canal de imagens.")],
+      });
       return;
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const attachments = [];
@@ -36,9 +39,15 @@ module.exports = {
         channel: interaction.channel,
         attachments,
       });
-      await interaction.editReply({ content: `Upload concluído!\n${formatResults(results)}` });
+      await interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
+        components: [createUserResultCard(results)],
+      });
     } catch (error) {
-      await interaction.editReply({ content: `Não foi possível concluir o upload: ${error.message}` });
+      await interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
+        components: [createUserResultCard([], error.message)],
+      });
     }
   },
 };
