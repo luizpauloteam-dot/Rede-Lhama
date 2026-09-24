@@ -16,14 +16,6 @@ for (let index = 1; index <= config.imageUpload.maxImages; index += 1) {
 module.exports = {
   data,
   async run(client, interaction) {
-    if (interaction.channelId !== config.imageUpload.uploadChannelId) {
-      await interaction.reply({
-        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-        components: [createUserResultCard([], "O comando `/upload` só pode ser usado no canal de imagens.")],
-      });
-      return;
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const attachments = [];
