@@ -16,6 +16,7 @@ for (let index = 1; index <= config.imageUpload.maxImages; index += 1) {
 module.exports = {
   data,
   async run(client, interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const attachments = [];
