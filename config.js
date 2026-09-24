@@ -168,6 +168,15 @@ const config = {
       path.join(staffApplicationDataDir, "panel-message.json"),
     ),
   },
+  imageUpload: {
+    enabled: Boolean(String(process.env.IMGBB_API_KEY || "6ea741790b82089826ce0605672dcaa2").trim()),
+    apiKey: String(process.env.IMGBB_API_KEY || "6ea741790b82089826ce0605672dcaa2").trim(),
+    uploadChannelId: String(process.env.UPLOAD_CHANNEL_ID || "1552691287960846406").trim(),
+    logChannelId: String(process.env.LOG_CHANNEL_ID || process.env.IMAGE_UPLOAD_LOG_CHANNEL_ID || "1552692349719805972").trim(),
+    maxImages: 5,
+    maxImageSize: 32 * 1024 * 1024,
+    allowedTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+  },
   builderApplications: {
     reviewChannelId: String(process.env.DISCORD_STAFF_APPLICATION_CHANNEL_ID || "1541472235909546084").trim(),
     panelMessageFilePath: resolveLocalPath(
