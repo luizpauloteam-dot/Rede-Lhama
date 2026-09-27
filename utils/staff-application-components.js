@@ -113,6 +113,20 @@ function getTimeGreeting(date = new Date()) {
 }
 
 function buildRejectionMessage({ name, reviewer, role, reason, postscript }) {
+  if (role === "Staff") {
+    const description = [
+      `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer.displayName || reviewer.username}**, **fundador** da **Rede Lhama** e estou a entrar em contato com você por conta da sua candidatura para o cargo de **Staff** no servidor. Antes de mais nada, gostaríamos de expressar nosso **agradecimento** pelo seu interesse em fazer parte da nossa equipe, pela **dedicação** e pelo tempo que você investiu ao preencher nosso formulário.`,
+      "Depois de uma avaliação cuidadosa, chegamos à conclusão de que, por enquanto, **o seu perfil não atende completamente às nossas expectativas para a vaga em questão**. Por esse motivo, não seguiremos para a próxima etapa do processo.",
+      `**Motivo:** ${reason}`,
+      "Compreendemos que essa não é a notícia que você gostaria de receber, mas esperamos que essa experiência possa contribuir de alguma forma para o seu desenvolvimento. Desejamos todo o sucesso na sua busca por novas oportunidades.",
+      "Agradecemos mais uma vez pelo seu formulário e envolvimento.",
+      `**PS:** ${postscript || "x"}`,
+      "Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama © 2026",
+    ].join("\n\n");
+    return new EmbedBuilder().setColor(0xED4245)
+      .setTitle(`${config.team.titleEmoji} • Candidatura Reprovada`)
+      .setDescription(description).setTimestamp();
+  }
   const description = [
     `${getTimeGreeting()} ${name}, agradecemos pelo interesse e pelo tempo dedicado \u00e0 candidatura para **${role}**.`,
     "Ap\u00f3s avaliarmos seu formul\u00e1rio, decidimos n\u00e3o seguir com a candidatura neste momento. Desejamos sucesso nos seus pr\u00f3ximos passos.",
@@ -126,6 +140,20 @@ function buildRejectionMessage({ name, reviewer, role, reason, postscript }) {
 }
 
 function buildApprovalMessage({ name, reviewer, role }) {
+  if (role === "Staff") {
+    const description = [
+      `${getTimeGreeting()} ${name}, tudo bem? Sou **${reviewer.displayName || reviewer.username}**, **fundador** da **Rede Lhama** e estou entrando em contato com você por conta da sua candidatura para o cargo de **Staff** no servidor. Antes de mais nada, gostaríamos de expressar nosso **agradecimento** pelo seu interesse em fazer parte da nossa equipe, pela **dedicação** e pelo tempo que você investiu ao preencher nosso formulário.`,
+      "Depois de uma avaliação cuidadosa, temos o prazer de informar que **sua candidatura foi aprovada** e você está apto a avançar para a próxima etapa do processo de recrutamento.",
+      "Para darmos continuidade ao procedimento, será necessário que você **abra um ticket** em nosso servidor. Através dele, nossa equipe irá realizar a **segunda parte do processo de recrutamento** e fornecer todas as informações necessárias para a próxima etapa.",
+      "**Próximo passo:** Abra um ticket na categoria de **Recrutamento** e aguarde o atendimento de nossa equipe.",
+      "Parabéns pela aprovação e desejamos boa sorte na próxima etapa!",
+      "**PS:** x",
+      "Atenciosamente,\nRede Lhama Team.\n-# Rede Lhama ©",
+    ].join("\n\n");
+    return new EmbedBuilder().setColor(0x57F287)
+      .setTitle(`${config.team.titleEmoji} • Candidatura Aprovada`)
+      .setDescription(description).setTimestamp();
+  }
   return new EmbedBuilder().setColor(0x57F287)
     .setTitle(`${config.team.titleEmoji} \u2022 Candidatura Aprovada`)
     .setDescription(`${getTimeGreeting()} ${name}, sua candidatura para **${role}** foi aprovada. Parab\u00e9ns e seja bem-vindo(a) \u00e0 equipe da **Rede Lhama**!\n\nEm breve, a equipe poder\u00e1 entrar em contato para orientar voc\u00ea sobre os pr\u00f3ximos passos.\n\nAtenciosamente,\nRede Lhama Team.`)
