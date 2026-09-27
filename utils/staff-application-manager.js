@@ -4,12 +4,10 @@ const { createLogger } = require("./logger");
 const { upsertPanelMessage } = require("./panel-message");
 const {
   APPLICATION_FIELDS, BUILDER_APPLICATION_FIELDS, BUILDER_APPLICATION_IDS, STAFF_APPLICATION_IDS,
-  buildApplicationRejectionModal, buildRejectionMessage,
+  buildApplicationRejectionModal, buildApprovalMessage, buildRejectionMessage,
   buildBuilderApplicationDecisionRow, buildBuilderApplicationEmbed, buildBuilderApplicationModal, buildBuilderApplicationPanel,
   buildStaffApplicationDecisionRow, buildStaffApplicationEmbed, buildStaffApplicationModal, buildStaffApplicationPanel,
 } = require("./staff-application-components");
-const { buildTeamModal } = require("./team-components");
-const { resolveTeamRoles } = require("./team-roles");
 
 const log = createLogger("staff-applications");
 
@@ -50,15 +48,35 @@ async function handleReviewButton(interaction, applicationType, action, applican
     return;
   }
   if (action === "approve") {
-    const roles = await interaction.guild.roles.fetch();
-    let ranks;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      ({ ranks } = resolveTeamRoles(roles));
+      const applicant = await interaction.client.users.fetch(applicantId);
+      const applicationEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+        .setColor(0x57F287)
+        .setFooter({ text: `Candidatura aprovada por ${interaction.user.tag}` });
+      await interaction.message.edit({
+        embeds: [applicationEmbed],
+        components: [applicationType.buildDecisionRow(applicantId, { disabled: true })],
+        allowedMentions: { parse: [] },
+      });
+      try {
+        await applicant.send({
+          embeds: [buildApprovalMessage({
+            name: applicant.globalName || applicant.username,
+            reviewer: interaction.user,
+            role: applicationType === APPLICATION_TYPES[1] ? "Construtor" : "Staff",
+          })],
+          allowedMentions: { parse: [] },
+        });
+        await interaction.editReply("Candidatura aprovada e mensagem enviada por DM.");
+      } catch (error) {
+        log.warn(`N\u00e3o foi poss\u00edvel enviar a aprova\u00e7\u00e3o por DM para ${applicantId}.`, error);
+        await interaction.editReply("Candidatura aprovada, mas n\u00e3o consegui enviar a DM. A pessoa precisa permitir mensagens diretas.");
+      }
     } catch (error) {
-      await replyEphemeral(interaction, error.message);
-      return;
+      log.error(`Falha ao aprovar candidatura ${applicantId} (intera\u00e7\u00e3o ${interaction.id}).`, error);
+      await interaction.editReply("N\u00e3o consegui concluir a aprova\u00e7\u00e3o da candidatura. Tente novamente.");
     }
-    await interaction.showModal(buildTeamModal("entrar", ranks, applicantId));
     return;
   }
   await interaction.showModal(buildApplicationRejectionModal(
