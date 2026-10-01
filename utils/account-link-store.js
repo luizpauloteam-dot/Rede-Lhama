@@ -200,8 +200,8 @@ async function consumeLinkCode(input) {
       linkedAccount,
     ];
 
-    await writeFileAtomic(config.link.pendingCodesFilePath, serializePendingCodes(remainingCodes));
     await writeFileAtomic(config.link.linkedAccountsFilePath, serializeLinkedAccounts(nextLinkedAccounts));
+    await writeFileAtomic(config.link.pendingCodesFilePath, serializePendingCodes(remainingCodes));
 
     return linkedAccount;
   });

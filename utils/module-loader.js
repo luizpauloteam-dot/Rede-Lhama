@@ -4,8 +4,9 @@ const path = require("path");
 async function listJavaScriptFiles(rootDir) {
   try {
     await fs.access(rootDir);
-  } catch {
-    return [];
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
   }
 
   const entries = await fs.readdir(rootDir, { withFileTypes: true });

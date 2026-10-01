@@ -169,8 +169,8 @@ const config = {
     ),
   },
   imageUpload: {
-    enabled: Boolean(String(process.env.IMGBB_API_KEY || "6ea741790b82089826ce0605672dcaa2").trim()),
-    apiKey: String(process.env.IMGBB_API_KEY || "6ea741790b82089826ce0605672dcaa2").trim(),
+    apiKey: String(process.env.IMGBB_API_KEY || "").trim(),
+    enabled: Boolean(String(process.env.IMGBB_API_KEY || "").trim()),
     uploadChannelId: String(process.env.UPLOAD_CHANNEL_ID || "1552691287960846406").trim(),
     logChannelId: String(process.env.LOG_CHANNEL_ID || process.env.IMAGE_UPLOAD_LOG_CHANNEL_ID || "1552692349719805972").trim(),
     maxImages: 5,

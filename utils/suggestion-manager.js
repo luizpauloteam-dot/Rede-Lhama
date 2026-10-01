@@ -25,6 +25,13 @@ const SAFE_ALLOWED_MENTIONS = {
   parse: [],
   repliedUser: false,
 };
+let suggestionStoreLock = Promise.resolve();
+
+function withSuggestionStoreLock(action) {
+  const next = suggestionStoreLock.then(action, action);
+  suggestionStoreLock = next.catch(() => null);
+  return next;
+}
 
 async function ensureParentDir(filePath) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -40,22 +47,31 @@ async function readSuggestionStore() {
   try {
     const content = await fs.readFile(config.suggestions.storeFilePath, "utf8");
     const store = JSON.parse(content);
+    if (!store || typeof store.suggestions !== "object" || Array.isArray(store.suggestions)) {
+      throw new Error("Arquivo de sugestões possui uma estrutura inválida.");
+    }
     return {
-      suggestions: store.suggestions || {},
+      suggestions: store.suggestions,
     };
   } catch (error) {
     if (error.code === "ENOENT") {
       return createEmptySuggestionStore();
     }
 
-    log.warn("Não foi possível ler o arquivo de sugestões.", error);
-    return createEmptySuggestionStore();
+    throw error;
   }
 }
 
 async function writeSuggestionStore(store) {
   await ensureParentDir(config.suggestions.storeFilePath);
-  await fs.writeFile(config.suggestions.storeFilePath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  const temporaryPath = `${config.suggestions.storeFilePath}.${process.pid}.tmp`;
+  try {
+    await fs.writeFile(temporaryPath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+    await fs.rename(temporaryPath, config.suggestions.storeFilePath);
+  } catch (error) {
+    await fs.unlink(temporaryPath).catch(() => null);
+    throw error;
+  }
 }
 
 function isSendableTextChannel(channel) {
@@ -288,9 +304,11 @@ async function handleSuggestionModal(interaction) {
     suggestion.threadMessageId = threadResult.threadMessageId;
   }
 
-  const store = await readSuggestionStore();
-  store.suggestions[suggestion.messageId] = suggestion;
-  await writeSuggestionStore(store);
+  await withSuggestionStoreLock(async () => {
+    const store = await readSuggestionStore();
+    store.suggestions[suggestion.messageId] = suggestion;
+    await writeSuggestionStore(store);
+  });
   await message
     .edit({
       content: null,
@@ -311,6 +329,10 @@ async function handleSuggestionModal(interaction) {
 }
 
 async function handleSuggestionVote(interaction, suggestionId, voteType) {
+  return withSuggestionStoreLock(() => handleSuggestionVoteUnlocked(interaction, suggestionId, voteType));
+}
+
+async function handleSuggestionVoteUnlocked(interaction, suggestionId, voteType) {
   const store = await readSuggestionStore();
   const suggestion = store.suggestions[suggestionId];
 
@@ -367,6 +389,10 @@ async function lockSuggestionThread(channel) {
 }
 
 async function handleImplementSuggestion(interaction, suggestionId) {
+  return withSuggestionStoreLock(() => handleImplementSuggestionUnlocked(interaction, suggestionId));
+}
+
+async function handleImplementSuggestionUnlocked(interaction, suggestionId) {
   if (!canImplementSuggestion(interaction.member)) {
     await replyEphemeral(interaction, "Somente administradores podem implementar sugestões.");
     return;

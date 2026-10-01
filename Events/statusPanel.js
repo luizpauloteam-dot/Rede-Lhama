@@ -51,9 +51,9 @@ function buildOfflineStatus(error) {
 }
 
 function toNonNegativeInteger(value) {
-  const parsedValue = Number.parseInt(String(value || ""), 10);
+  const parsedValue = Number(value);
 
-  if (Number.isFinite(parsedValue) && parsedValue >= 0) {
+  if (Number.isSafeInteger(parsedValue) && parsedValue >= 0) {
     return parsedValue;
   }
 
@@ -61,8 +61,8 @@ function toNonNegativeInteger(value) {
 }
 
 function resolveUpdatedAtMillis(statusData) {
-  const directValue = Number.parseInt(String(statusData.updatedAtMillis || ""), 10);
-  if (Number.isFinite(directValue) && directValue > 0) {
+  const directValue = Number(statusData.updatedAtMillis);
+  if (Number.isSafeInteger(directValue) && directValue > 0) {
     return directValue;
   }
 
@@ -76,10 +76,9 @@ function resolveUpdatedAtMillis(statusData) {
 
 function normalizeMinecraftStatus(statusData) {
   const updatedAtMillis = resolveUpdatedAtMillis(statusData);
-  const isFresh =
-    updatedAtMillis > 0 &&
-    Date.now() - updatedAtMillis <= config.status.staleAfterMs;
-  const online = Boolean(statusData.online) && isFresh;
+  const statusAgeMs = Date.now() - updatedAtMillis;
+  const isFresh = updatedAtMillis > 0 && statusAgeMs >= 0 && statusAgeMs <= config.status.staleAfterMs;
+  const online = statusData.online === true && isFresh;
 
   return {
     online,
